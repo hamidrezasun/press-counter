@@ -14,31 +14,48 @@
 #define INFLUXDB_ORG "tooswasher"
 #define INFLUXDB_BUCKET "manufacture"
 #define INPUT_PIN 2
+#define AP_SSID WIFI_SSID // Same as upstream AP
+#define AP_PASSWORD WIFI_PASSWORD // Same as upstream AP
+#define AP_CHANNEL 6 // Must match upstream AP channel
 
 // Timing Constants
-#define EDGE_TIMEOUT 100
-#define MIN_PULSE_TRAIN_DURATION 500
-#define REPORT_INTERVAL 1
-#define SEND_RETRY_INTERVAL 5000
+#define EDGE_TIMEOUT 100 // Milliseconds
+#define MIN_PULSE_TRAIN_DURATION 500 // Microseconds
+#define SEND_RETRY_INTERVAL 5000 // Milliseconds
 #define EEPROM_SIZE 6
 #define INIT_MARKER 0xAA
+#define EEPROM_SAVE_THRESHOLD 10
+#define EEPROM_SAVE_INTERVAL 60000 // Milliseconds
+#define SERVER_INTERVAL 100 // Milliseconds
+#define QUEUE_SIZE 100
 
 ESP8266WiFiMulti wifiMulti;
 InfluxDBClient client(INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_TOKEN);
 Point pulsePoint("production");
 ESP8266WebServer server(80);
 
+// Pulse Queue
+struct PulseData {
+  uint16_t count;
+  unsigned long duration_ms;
+};
+PulseData pulseQueue[QUEUE_SIZE];
+volatile uint16_t queueHead = 0;
+volatile uint16_t queueTail = 0;
+
 // State Variables
 struct {
   uint16_t pulseCount;
   uint16_t failedPulseCount;
   unsigned long lastPulseDuration;
-  unsigned long lastEdgeTime;
-  unsigned long pulseTrainStart;
   unsigned long lastSendAttempt;
-  bool inPulseTrain;
-  bool shouldSend;
-} state = {0, 0, 0, 0, 0, 0, false, false};
+} state = {0, 0, 0, 0};
+
+// Interrupt Variables
+volatile unsigned long lastEdgeTime = 0;
+volatile bool inPulseTrain = false;
+volatile unsigned long pulseTrainStart = 0;
+volatile bool edgeDetected = false;
 
 const char* htmlPage = R"rawliteral(
 <!DOCTYPE html>
@@ -75,8 +92,10 @@ const char* htmlPage = R"rawliteral(
   
   <div class="card">
     <h2>Device Information</h2>
-    <div class="status">WiFi Signal: <span class="%SIGNAL_CLASS%">%SIGNAL%</span></div>
-    <div class="status">IP Address: %IP%</div>
+    <div class="status">WiFi Signal (STA): <span class="%SIGNAL_CLASS%">%SIGNAL%</span></div>
+    <div class="status">IP Address (STA): %IP%</div>
+    <div class="status">Bridge SSID: %AP_SSID%</div>
+    <div class="status">Connected Clients: %AP_CLIENTS%</div>
   </div>
   
   <div class="card">
@@ -84,13 +103,14 @@ const char* htmlPage = R"rawliteral(
     <div class="status">Current Count: %COUNT%</div>
     <div class="status">Failed Counts: %FAILED%</div>
     <div class="status">Last Duration: %DURATION% ms</div>
+    <div class="status">Queue Usage: %QUEUE_USAGE%</div>
   </div>
   
   <div class="card">
     <h2>Firmware Update</h2>
     <form method='POST' action='/update' enctype='multipart/form-data'>
       <input type='file' name='update'>
-      <button class='btn' type='submit'>Update Firmware</button>
+      <стаbutton class='btn' type='submit'>Update Firmware</button>
     </form>
   </div>
 </body>
@@ -128,16 +148,25 @@ void loadCountFromEEPROM() {
 }
 
 void saveCountToEEPROM(bool saveFailed = false) {
-  EEPROM.begin(EEPROM_SIZE);
-  EEPROM.write(0, INIT_MARKER);
-  EEPROM.write(1, state.pulseCount & 0xFF);
-  EEPROM.write(2, (state.pulseCount >> 8) & 0xFF);
-  if (saveFailed) {
-    EEPROM.write(3, state.failedPulseCount & 0xFF);
-    EEPROM.write(4, (state.failedPulseCount >> 8) & 0xFF);
+  static uint16_t unsavedPulses = 0;
+  static unsigned long lastEepromSave = 0;
+  
+  unsavedPulses++;
+  
+  if (unsavedPulses >= EEPROM_SAVE_THRESHOLD || (millis() - lastEepromSave > EEPROM_SAVE_INTERVAL)) {
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.write(0, INIT_MARKER);
+    EEPROM.write(1, state.pulseCount & 0xFF);
+    EEPROM.write(2, (state.pulseCount >> 8) & 0xFF);
+    if (saveFailed) {
+      EEPROM.write(3, state.failedPulseCount & 0xFF);
+      EEPROM.write(4, (state.failedPulseCount >> 8) & 0xFF);
+    }
+    EEPROM.commit();
+    EEPROM.end();
+    unsavedPulses = 0;
+    lastEepromSave = millis();
   }
-  EEPROM.commit();
-  EEPROM.end();
 }
 
 void handleRoot() {
@@ -148,104 +177,111 @@ void handleRoot() {
   page.replace("%SIGNAL%", getSignalQuality(rssi) + " (" + String(rssi) + " dBm)");
   page.replace("%SIGNAL_CLASS%", getSignalClass(rssi));
   page.replace("%IP%", WiFi.localIP().toString());
+  page.replace("%AP_SSID%", AP_SSID);
+  page.replace("%AP_CLIENTS%", String(WiFi.softAPgetStationNum()));
   page.replace("%COUNT%", String(state.pulseCount));
   page.replace("%FAILED%", String(state.failedPulseCount));
   page.replace("%DURATION%", String(state.lastPulseDuration));
+  page.replace("%QUEUE_USAGE%", String(queueHead - queueTail));
   
   server.send(200, "text/html", page);
 }
 
-void handlePulseTrain() {
-  static int lastState = LOW;
-  int currentState = digitalRead(INPUT_PIN);
-
-  if (currentState != lastState) {
-    state.lastEdgeTime = millis();
-    if (!state.inPulseTrain) {
-      state.inPulseTrain = true;
-      state.pulseTrainStart = state.lastEdgeTime;
-    }
-    lastState = currentState;
+void ICACHE_RAM_ATTR handlePulseInterrupt() {
+  unsigned long currentTime = micros();
+  lastEdgeTime = currentTime;
+  
+  if (!inPulseTrain) {
+    inPulseTrain = true;
+    pulseTrainStart = currentTime;
   }
-
-  if (state.inPulseTrain && (millis() - state.lastEdgeTime > EDGE_TIMEOUT)) {
-    unsigned long duration = state.lastEdgeTime - state.pulseTrainStart;
-
-    if (duration >= MIN_PULSE_TRAIN_DURATION) {
-      state.pulseCount++;
-      state.lastPulseDuration = duration;
-      saveCountToEEPROM();
-      if (state.pulseCount % REPORT_INTERVAL == 0) {
-        state.shouldSend = true;
-      }
-    }
-    state.inPulseTrain = false;
-  }
+  edgeDetected = true;
 }
 
-void sendToInfluxDB() {
-  if (state.pulseCount == 0 && state.failedPulseCount == 0) return;
+bool enqueuePulse(uint16_t count, unsigned long duration_ms) {
+  uint16_t nextHead = (queueHead + 1) % QUEUE_SIZE;
+  if (nextHead == queueTail) return false; // Queue full
+  pulseQueue[queueHead] = {count, duration_ms};
+  queueHead = nextHead;
+  return true;
+}
 
-  // Retry failed pulses first
-  if (state.failedPulseCount > 0) {
-    pulsePoint.clearFields();
-    pulsePoint.addField("count", state.failedPulseCount);
-    pulsePoint.addField("duration_ms", state.lastPulseDuration);
+bool dequeuePulse(PulseData& pulse) {
+  if (queueHead == queueTail) return false; // Queue empty
+  pulse = pulseQueue[queueTail];
+  queueTail = (queueTail + 1) % QUEUE_SIZE;
+  return true;
+}
 
-    if (client.writePoint(pulsePoint)) {
-      state.failedPulseCount = 0;
-      saveCountToEEPROM(true);
-    }
-  }
+void sendToInfluxDB(uint16_t count, unsigned long duration_ms, bool fromQueue = false) {
+  pulsePoint.clearFields();
+  pulsePoint.addField("count", count);
+  pulsePoint.addField("duration_ms", duration_ms);
 
-  // Send current pulses
-  if (state.pulseCount > 0) {
-    pulsePoint.clearFields();
-    pulsePoint.addField("count", state.pulseCount);
-    pulsePoint.addField("duration_ms", state.lastPulseDuration);
-
-    if (!client.writePoint(pulsePoint)) {
-      state.failedPulseCount += state.pulseCount;
-      state.pulseCount = 0;
-      saveCountToEEPROM(true);
-    } else {
-      state.pulseCount = 0;
+  if (client.writePoint(pulsePoint)) {
+    if (!fromQueue) {
+      state.pulseCount++;
       saveCountToEEPROM();
     }
+  } else {
+    if (!fromQueue) {
+      if (enqueuePulse(count, duration_ms)) {
+        state.failedPulseCount++;
+        saveCountToEEPROM(true);
+      }
+    } else {
+      enqueuePulse(count, duration_ms);
+    }
   }
-
   state.lastSendAttempt = millis();
 }
 
+void processQueue() {
+  PulseData pulse;
+  while (dequeuePulse(pulse)) {
+    sendToInfluxDB(pulse.count, pulse.duration_ms, true);
+    yield();
+  }
+}
+
 void sendDeviceInfo() {
-  // Send zero-count record
   pulsePoint.clearFields();
   pulsePoint.addField("count", 0);
   pulsePoint.addField("duration_ms", 0);
   client.writePoint(pulsePoint);
 
-  // Send IP address record
   Point infoPoint("device_info");
   infoPoint.addTag("device", DEVICE);
   infoPoint.addField("ip", WiFi.localIP().toString());
   infoPoint.addField("rssi", WiFi.RSSI());
+  infoPoint.addField("ap_clients", WiFi.softAPgetStationNum());
   client.writePoint(infoPoint);
 }
 
 void setup() {
+  system_update_cpu_freq(160); // Overclock to 160 MHz
   pinMode(INPUT_PIN, INPUT);
+  attachInterrupt(digitalPinToInterrupt(INPUT_PIN), handlePulseInterrupt, CHANGE);
   loadCountFromEEPROM();
 
-  WiFi.mode(WIFI_STA);
+  // Configure WiFi in STA+AP mode
+  WiFi.mode(WIFI_AP_STA);
   WiFi.setSleepMode(WIFI_NONE_SLEEP);
   wifiMulti.addAP(WIFI_SSID, WIFI_PASSWORD);
-  
+
+  // Configure AP with same SSID and password, no local IP assignment
+  WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, false, 4); // Max 4 clients
+  // Note: No softAPConfig to avoid local DHCP; rely on upstream DHCP
+
   while (wifiMulti.run() != WL_CONNECTED) {
     delay(500);
   }
 
   // Initialize web server
   server.on("/", handleRoot);
+  server.on("/queue", []() {
+    server.send(200, "text/plain", "Queue Size: " + String(queueHead - queueTail));
+  });
   server.on("/update", HTTP_GET, []() {
     server.send(200, "text/html", "<form method='POST' action='/update' enctype='multipart/form-data'><input type='file' name='update'><button>Update</button></form>");
   });
@@ -274,23 +310,42 @@ void setup() {
     }
     yield();
   });
-  
+
   server.begin();
 
   pulsePoint.addTag("device", DEVICE);
-  
-  // Send initial device information
+
   sendDeviceInfo();
 }
 
 void loop() {
-  server.handleClient();
-  handlePulseTrain();
+  static unsigned long lastServerHandle = 0;
 
-  if (state.shouldSend && !state.inPulseTrain) {
-    if (millis() - state.lastSendAttempt > SEND_RETRY_INTERVAL) {
-      sendToInfluxDB();
-      state.shouldSend = false;
+  if (millis() - lastServerHandle > SERVER_INTERVAL) {
+    server.handleClient();
+    lastServerHandle = millis();
+  }
+
+  if (edgeDetected) {
+    noInterrupts();
+    unsigned long edgeTime = lastEdgeTime;
+    unsigned long startTime = pulseTrainStart;
+    bool pulseActive = inPulseTrain;
+    interrupts();
+
+    if (pulseActive && (micros() - edgeTime > EDGE_TIMEOUT * 1000)) {
+      unsigned long duration = (edgeTime - startTime) / 1000;
+      if (duration >= MIN_PULSE_TRAIN_DURATION) {
+        sendToInfluxDB(1, duration);
+      }
+      noInterrupts();
+      inPulseTrain = false;
+      edgeDetected = false;
+      interrupts();
     }
+  }
+
+  if (millis() - state.lastSendAttempt > SEND_RETRY_INTERVAL) {
+    processQueue();
   }
 }
