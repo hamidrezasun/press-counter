@@ -8,7 +8,7 @@
 #include <time.h>
 
 // --- Configuration ---
-#define DEVICE "05015013"
+#define DEVICE "05019902"
 #define WIFI_SSID "TW factory"
 #define WIFI_PASSWORD "e8cac589tw"
 #define INFLUXDB_URL "http://192.168.1.37:8086"
@@ -23,7 +23,7 @@
 
 // --- Timing Constants ---
 #define EDGE_TIMEOUT 30
-#define MIN_PULSE_TRAIN_DURATION 500
+#define MIN_PULSE_TRAIN_DURATION 250
 #define REPORT_INTERVAL 1
 #define SEND_RETRY_INTERVAL 5000
 
