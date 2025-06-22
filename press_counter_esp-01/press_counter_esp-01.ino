@@ -1,25 +1,21 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266WebServer.h>
-#include <WiFiUdp.h>
-#include <InfluxDbClient.h>
+#include <asyncHTTPrequest.h>
 #include <EEPROM.h>
 #include <ESP8266HTTPUpdateServer.h>
-#include <time.h>
 
 // --- Configuration ---
-#define DEVICE "05019902"
+#define DEVICE "05015005"
 #define WIFI_SSID "TW factory"
 #define WIFI_PASSWORD "e8cac589tw"
 #define INFLUXDB_URL "http://192.168.1.37:8086"
 #define INFLUXDB_TOKEN "_2B1s0cJGXznc9rXE41mxOusyn159HAAsMyGlLxiFkZd0V8dJKztKYVEPNeKGQSgc0gulh-vhnhn6ONcCr3lBA=="
 #define INFLUXDB_ORG "tooswasher"
 #define INFLUXDB_BUCKET "manufacture"
-
+#define HTTP_REQUEST_TIMEOUT 0.3 //second
 // --- Hardware & Time ---
 #define INPUT_PIN 2
-#define TIME_ZONE "IRST-3:30" // UTC+03:30 Iran Standard Time
-#define NTP_SERVER "win-3d0te4stpjh.tooswasher.com"
 
 // --- Timing Constants ---
 #define EDGE_TIMEOUT 30
@@ -28,20 +24,14 @@
 #define SEND_RETRY_INTERVAL 5000
 
 // --- EEPROM ---
-// EEPROM Layout:
-// Byte 0:     INIT_MARKER (1 byte)
-// Bytes 1-4:  pulseCount (4 bytes)
-// Bytes 5-8:  failedPulseCount (4 bytes)
-// Bytes 9-12: maxSendDuration_ms (4 bytes)
 #define EEPROM_SIZE 16
 #define INIT_MARKER 0xAA
 
 // --- Global Objects ---
 ESP8266WiFiMulti wifiMulti;
-InfluxDBClient client(INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_TOKEN);
-Point pulsePoint("production");
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
+asyncHTTPrequest request;
 
 // --- State Variables ---
 struct {
@@ -51,16 +41,20 @@ struct {
   unsigned long lastPulseDuration;
   unsigned long lastSendDuration_ms;
   unsigned long lastShortPulseDuration;
-  char lastShortPulseTimestamp[30];
+  unsigned long lastShortPulseTime;
   unsigned long lastEdgeTime;
   unsigned long pulseTrainStart;
   unsigned long lastSendAttempt;
   bool inPulseTrain;
   bool shouldSend;
-} state = {0, 0, 0, 0, 0, 0, "N/A", 0, 0, 0, false, false};
+  bool deviceInfoSent;
+  bool requestInProgress;
+  bool isDeviceInfoRequest;
+  unsigned long requestStartTime;
+} state = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false, false, false, 0};
 
 // --- Web Page Template ---
-const char* htmlPage = R"rawliteral(
+const char htmlPage[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
@@ -85,7 +79,6 @@ const char* htmlPage = R"rawliteral(
   <h1>%DEVICE% Status</h1>
   <div class="card">
     <h2>Device Information</h2>
-    <div class="status">Time: %TIME%</div>
     <div class="status">WiFi Signal: <span class="%SIGNAL_CLASS%">%SIGNAL%</span></div>
     <div class="status">IP Address: %IP%</div>
   </div>
@@ -117,7 +110,6 @@ const char* htmlPage = R"rawliteral(
 </html>
 )rawliteral";
 
-// --- Helper Functions ---
 String getSignalQuality(int rssi) {
   if (rssi >= -50) return "Excellent";
   if (rssi >= -60) return "Good";
@@ -125,24 +117,40 @@ String getSignalQuality(int rssi) {
   return "Weak";
 }
 
-// --- EEPROM Functions ---
 void saveCountsToEEPROM() {
-  EEPROM.begin(EEPROM_SIZE);
-  EEPROM.write(0, INIT_MARKER);
-  EEPROM.put(1, state.pulseCount);
-  EEPROM.put(5, state.failedPulseCount);
-  EEPROM.put(9, state.maxSendDuration_ms);
-  EEPROM.commit();
-  EEPROM.end();
+  static uint32_t lastSavedPulseCount = 0;
+  static uint32_t lastSavedFailedCount = 0;
+  static uint32_t lastSavedMaxDuration = 0;
+  
+  if (state.pulseCount != lastSavedPulseCount || 
+      state.failedPulseCount != lastSavedFailedCount ||
+      state.maxSendDuration_ms != lastSavedMaxDuration) {
+    
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.write(0, INIT_MARKER);
+    EEPROM.put(1, state.pulseCount);
+    EEPROM.put(5, state.failedPulseCount);
+    EEPROM.put(9, state.maxSendDuration_ms);
+    EEPROM.commit();
+    EEPROM.end();
+    
+    lastSavedPulseCount = state.pulseCount;
+    lastSavedFailedCount = state.failedPulseCount;
+    lastSavedMaxDuration = state.maxSendDuration_ms;
+  }
 }
 
 void loadCountsFromEEPROM() {
   EEPROM.begin(EEPROM_SIZE);
   if (EEPROM.read(0) != INIT_MARKER) {
+    EEPROM.write(0, INIT_MARKER);
+    EEPROM.put(1, 0);
+    EEPROM.put(5, 0);
+    EEPROM.put(9, 0);
+    EEPROM.commit();
     state.pulseCount = 0;
     state.failedPulseCount = 0;
     state.maxSendDuration_ms = 0;
-    saveCountsToEEPROM();
   } else {
     EEPROM.get(1, state.pulseCount);
     EEPROM.get(5, state.failedPulseCount);
@@ -158,18 +166,24 @@ void resetEEPROM() {
   saveCountsToEEPROM();
 }
 
-// --- Web Server Handlers ---
 void handleRoot() {
-  String page = htmlPage;
+  String page = FPSTR(htmlPage);
   int rssi = WiFi.RSSI();
   
-  time_t now = time(nullptr);
-  char timeStr[30];
-  strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", localtime(&now));
-  
+  String signalClass = "signal-weak";
+  if (rssi >= -50) signalClass = "signal-excellent";
+  else if (rssi >= -60) signalClass = "signal-good";
+  else if (rssi >= -70) signalClass = "signal-fair";
+
+  String shortPulseTime = "Never";
+  if (state.lastShortPulseTime > 0) {
+    unsigned long seconds = (millis() - state.lastShortPulseTime) / 1000;
+    shortPulseTime = String(seconds) + " seconds ago";
+  }
+
   page.replace("%DEVICE%", DEVICE);
-  page.replace("%TIME%", timeStr);
   page.replace("%SIGNAL%", getSignalQuality(rssi) + " (" + String(rssi) + " dBm)");
+  page.replace("%SIGNAL_CLASS%", signalClass);
   page.replace("%IP%", WiFi.localIP().toString());
   page.replace("%COUNT%", String(state.pulseCount));
   page.replace("%FAILED%", String(state.failedPulseCount));
@@ -177,7 +191,7 @@ void handleRoot() {
   page.replace("%SEND_DURATION%", String(state.lastSendDuration_ms));
   page.replace("%MAX_SEND_DURATION%", String(state.maxSendDuration_ms));
   page.replace("%SHORT_PULSE_DURATION%", String(state.lastShortPulseDuration));
-  page.replace("%SHORT_PULSE_TIME%", state.lastShortPulseTimestamp);
+  page.replace("%SHORT_PULSE_TIME%", shortPulseTime);
   page.replace("%MIN_PULSE_DURATION%", String(MIN_PULSE_TRAIN_DURATION));
 
   server.send(200, "text/html", page);
@@ -186,10 +200,9 @@ void handleRoot() {
 void handleReset() {
   resetEEPROM();
   server.sendHeader("Location", "/");
-  server.send(303); // Redirect back to the root page
+  server.send(303);
 }
 
-// --- Core Logic ---
 void handlePulseTrain() {
   static int lastState = LOW;
   int currentState = digitalRead(INPUT_PIN);
@@ -215,84 +228,125 @@ void handlePulseTrain() {
       }
     } else {
       state.lastShortPulseDuration = duration;
-      time_t now = time(nullptr);
-      strftime(state.lastShortPulseTimestamp, sizeof(state.lastShortPulseTimestamp), "%Y-%m-%d %H:%M:%S", localtime(&now));
+      state.lastShortPulseTime = millis();
     }
   }
 }
 
-void sendToInfluxDB() {
-  if (wifiMulti.run() != WL_CONNECTED) {
+void onRequestResponse(void* opt, asyncHTTPrequest* req, int readyState) {
+  if (readyState != 4) return;
+
+  unsigned long sendDuration = millis() - state.requestStartTime;
+
+  if (req->responseHTTPcode() == 204) {
+    if (state.isDeviceInfoRequest) {
+      state.deviceInfoSent = true;
+    } else {
+      state.pulseCount = 0;
+      state.failedPulseCount = 0;
+      saveCountsToEEPROM();
+    }
+    state.lastSendDuration_ms = sendDuration;
+    if (sendDuration > state.maxSendDuration_ms) {
+      state.maxSendDuration_ms = sendDuration;
+      saveCountsToEEPROM();
+    }
+    state.shouldSend = false;
+  } else {
+    state.lastSendAttempt = millis();
+    if (!state.isDeviceInfoRequest) {
+      state.failedPulseCount += state.pulseCount;
+      state.pulseCount = 0;
+      saveCountsToEEPROM();
+    }
     state.shouldSend = true;
-    return;
+  }
+
+  state.requestInProgress = false;
+  state.isDeviceInfoRequest = false;
+}
+
+bool sendToInfluxDB() {
+  if (wifiMulti.run() != WL_CONNECTED || state.requestInProgress) {
+    return false;
   }
 
   uint32_t totalToSend = state.pulseCount + state.failedPulseCount;
-  if (totalToSend == 0) return;
+  if (totalToSend == 0) {
+    state.shouldSend = false;
+    return true;
+  }
 
-  pulsePoint.clearFields();
-  pulsePoint.addField("count", totalToSend);
-  pulsePoint.addField("pulse_duration_ms", state.lastPulseDuration);
-  
+  String lineProtocol;
+  lineProtocol.reserve(128);
+  lineProtocol = "production,device=" + String(DEVICE) + " count=" + String(totalToSend) + "i";
+  lineProtocol += ",pulse_duration_ms=" + String(state.lastPulseDuration) + "i";
   if (state.lastSendDuration_ms > 0) {
-    pulsePoint.addField("send_duration_ms", state.lastSendDuration_ms);
+    lineProtocol += ",send_duration_ms=" + String(state.lastSendDuration_ms) + "i";
   }
 
-  unsigned long sendStartTime = millis();
-  bool success = client.writePoint(pulsePoint);
-  state.lastSendDuration_ms = millis() - sendStartTime;
+  String url = String(INFLUXDB_URL) + "/api/v2/write?org=" + String(INFLUXDB_ORG) + 
+               "&bucket=" + String(INFLUXDB_BUCKET) + "&precision=ms";
 
-  if (state.lastSendDuration_ms > state.maxSendDuration_ms) {
-    state.maxSendDuration_ms = state.lastSendDuration_ms;
-  }
-
-  if (success) {
-    state.pulseCount = 0;
-    state.failedPulseCount = 0;
-  } else {
-    state.failedPulseCount = totalToSend;
-    state.pulseCount = 0;
+  if (request.open("POST", url.c_str())) {
+    request.setReqHeader("Authorization", ("Token " + String(INFLUXDB_TOKEN)).c_str());
+    request.setReqHeader("Content-Type", "text/plain; charset=utf-8");
+    state.requestStartTime = millis();
+    state.isDeviceInfoRequest = false;
+    state.requestInProgress = true;
+    state.lastSendAttempt = millis();
+    return request.send(lineProtocol.c_str());
   }
   
-  saveCountsToEEPROM();
   state.lastSendAttempt = millis();
+  state.shouldSend = true;
+  return false;
 }
 
 void sendDeviceInfo() {
-  if (wifiMulti.run() != WL_CONNECTED) return;
+  if (state.deviceInfoSent || wifiMulti.run() != WL_CONNECTED || state.requestInProgress) return;
 
-  Point infoPoint("device_info");
-  infoPoint.addTag("device", DEVICE);
-  infoPoint.addField("ip", WiFi.localIP().toString());
-  infoPoint.addField("rssi", WiFi.RSSI());
-  
-  client.writePoint(infoPoint);
+  String lineProtocol;
+  lineProtocol.reserve(128);
+  lineProtocol = "device_info,device=" + String(DEVICE) + 
+                 " ip=\"" + WiFi.localIP().toString() + "\"" +
+                 ",rssi=" + String(WiFi.RSSI()) + "i";
+
+  String url = String(INFLUXDB_URL) + "/api/v2/write?org=" + String(INFLUXDB_ORG) + 
+               "&bucket=" + String(INFLUXDB_BUCKET) + "&precision=ms";
+
+  if (request.open("POST", url.c_str())) {
+    request.setReqHeader("Authorization", ("Token " + String(INFLUXDB_TOKEN)).c_str());
+    request.setReqHeader("Content-Type", "text/plain; charset=utf-8");
+    state.requestStartTime = millis();
+    state.isDeviceInfoRequest = true;
+    state.requestInProgress = true;
+    request.send(lineProtocol.c_str());
+  }
 }
 
-// --- Main Setup and Loop ---
 void setup() {
+  ESP.wdtEnable(8000);
   pinMode(INPUT_PIN, INPUT);
   
   loadCountsFromEEPROM();
 
   WiFi.mode(WIFI_STA);
   wifiMulti.addAP(WIFI_SSID, WIFI_PASSWORD);
-  
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
+
   while (wifiMulti.run() != WL_CONNECTED) {
     delay(500);
   }
-
-  configTzTime(TIME_ZONE, NTP_SERVER);
-  
+  request.setTimeout(HTTP_REQUEST_TIMEOUT);
+  request.onReadyStateChange(onRequestResponse);
   server.on("/", handleRoot);
   server.on("/reset", HTTP_POST, handleReset);
-  httpUpdater.setup(&server);
+  httpUpdater.setup(&server, "/update", "admin", "password");
   server.begin();
-
-  pulsePoint.addTag("device", DEVICE);
   
   sendDeviceInfo();
-  if(state.pulseCount > 0 || state.failedPulseCount > 0){
+  if (state.pulseCount > 0 || state.failedPulseCount > 0) {
     state.shouldSend = true;
   }
 }
@@ -301,12 +355,9 @@ void loop() {
   server.handleClient();
   handlePulseTrain();
 
-  if (state.shouldSend && !state.inPulseTrain) {
-    if (state.failedPulseCount > 0 && (millis() - state.lastSendAttempt < SEND_RETRY_INTERVAL)) {
-      // Wait for retry interval
-    } else {
+  if (state.shouldSend && !state.inPulseTrain && !state.requestInProgress) {
+    if (millis() - state.lastSendAttempt >= SEND_RETRY_INTERVAL) {
       sendToInfluxDB();
-      state.shouldSend = false;
     }
   }
 }
