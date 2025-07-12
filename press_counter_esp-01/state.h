@@ -1,7 +1,9 @@
 #ifndef STATE_H
 #define STATE_H
 
-// State structure to hold device status and pulse counting data
+#include <Arduino.h> // For String type
+
+// State structure to hold device status, pulse counting, and RFID data
 struct State {
   uint32_t pulseCount;            // Number of valid pulses counted
   uint32_t failedPulseCount;      // Number of pulses failed to send
@@ -19,6 +21,10 @@ struct State {
   bool requestInProgress;         // Flag indicating active HTTP request
   bool isDeviceInfoRequest;       // Flag indicating if request is for device info
   unsigned long requestStartTime;  // Start timestamp of the current request
+  bool relayOn;                   // Relay status (true = on, false = off)
+  String lastUID;                 // Last read RFID card UID
+  bool rfidConnected;             // RFID module connection status
+  String newUID;                  // UID to write to the next detected tag
 };
 
 // External declaration of the global state variable

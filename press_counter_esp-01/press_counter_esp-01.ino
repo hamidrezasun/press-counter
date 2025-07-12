@@ -6,6 +6,7 @@
 #include "defines.h"
 #include "state.h"
 #include "InfluxDB.h"
+#include "RFID.h"
 
 // Global objects for WiFi, web server, and HTTP requests
 ESP8266WiFiMulti wifiMulti;          // Manages WiFi connections
@@ -14,7 +15,13 @@ ESP8266HTTPUpdateServer httpUpdater; // HTTP server for firmware updates
 asyncHTTPrequest request;            // Asynchronous HTTP request handler
 
 // Global state variable to track device status and pulse counts
-State state = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false, false, false, 0};
+State state = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false, false, false, 0, false, "", ""};
+
+// Toggles the relay on or off and updates state
+void toggleRelay(bool on) {
+  state.relayOn = on; // Update relay status in state
+  digitalWrite(RELAY_PIN, on ? HIGH : LOW); // Set relay pin (HIGH = on, LOW = off)
+}
 
 // Saves pulse counts and max send duration to EEPROM if changed
 void saveCountsToEEPROM() {
@@ -143,9 +150,13 @@ void onRequestResponse(void* opt, asyncHTTPrequest* req, int readyState) {
 // Initializes the device and sets up peripherals
 void setup() {
   ESP.wdtEnable(8000); // Enable watchdog timer with 8-second timeout
-  pinMode(INPUT_PIN, INPUT); // Configure input pin
-  
+  pinMode(INPUT_PIN, INPUT); // Configure pulse input pin
+  pinMode(RELAY_PIN, OUTPUT); // Configure relay pin as output
+  toggleRelay(false); // Initialize relay to off
+ 
   loadCountsFromEEPROM(); // Load saved counts from EEPROM
+
+  setupRFID(); // Initialize RC522 RFID module
 
   WiFi.mode(WIFI_STA); // Set WiFi to station mode
   wifiMulti.addAP(WIFI_SSID, WIFI_PASSWORD); // Add WiFi credentials
@@ -166,15 +177,16 @@ void setup() {
   }
 }
 
-// Main loop to handle web server, pulse detection, and data sending
+// Main loop to handle web server, pulse detection, RFID, and data sending
 void loop() {
   server.handleClient(); // Process web server requests
   handlePulseTrain(); // Process pulse input
+  handleRFID(); // Process RFID card reads
 
   // Check if data should be sent to InfluxDB
   if (state.shouldSend && !state.inPulseTrain && !state.requestInProgress) {
     if (millis() - state.lastSendAttempt >= SEND_RETRY_INTERVAL) {
-      sendTo(); // Attempt to send data
+      sendTo(); // Attempt to send pulse data
     }
   }
 }
