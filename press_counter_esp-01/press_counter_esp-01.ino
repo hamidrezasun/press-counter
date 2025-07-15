@@ -15,7 +15,7 @@ ESP8266HTTPUpdateServer httpUpdater; // HTTP server for firmware updates
 asyncHTTPrequest request;            // Asynchronous HTTP request handler
 
 // Global state variable to track device status and pulse counts
-State state = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false, false, false, 0, false, "", ""};
+State state = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false, false, false, 0, false, false, "", "", false, ""};
 
 // Toggles the relay on or off and updates state
 void toggleRelay(bool on) {
@@ -181,8 +181,11 @@ void setup() {
 void loop() {
   server.handleClient(); // Process web server requests
   handlePulseTrain(); // Process pulse input
-  handleRFID(); // Process RFID card reads
-
+  if (!state.attemptToWrite){
+    handleRFID(); // Process RFID card reads
+  }else{
+    writeRfid(state.newTagData);
+  }
   // Check if data should be sent to InfluxDB
   if (state.shouldSend && !state.inPulseTrain && !state.requestInProgress) {
     if (millis() - state.lastSendAttempt >= SEND_RETRY_INTERVAL) {

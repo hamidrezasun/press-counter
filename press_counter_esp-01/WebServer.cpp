@@ -33,7 +33,7 @@ void handleStatus() {
   int rssi = WiFi.RSSI();
   String shortPulseTime = state.lastShortPulseTime > 0 ? String((millis() - state.lastShortPulseTime) / 1000) + " seconds ago" : "Never";
   String rfidStatus = state.rfidConnected ? "Connected" : "Not Connected";
-
+  String attemptToWrite = state.attemptToWrite ? "trying" : "done";
   String json = "{";
   json += "\"device\":\"" + String(DEVICE) + "\",";
   json += "\"wifi_signal\":\"" + getSignalQuality(rssi) + " (" + String(rssi) + " dBm)\",";
@@ -49,7 +49,8 @@ void handleStatus() {
   json += "\"min_pulse_duration\":" + String(MIN_PULSE_TRAIN_DURATION) + ",";
   json += "\"rfid_status\":\"" + rfidStatus + "\",";
   json += "\"last_uid\":\"" + (state.lastUID.length() > 0 ? state.lastUID : "None") + "\",";
-  json += "\"new_uid\":\"" + (state.newUID.length() > 0 ? state.newUID : "None") + "\"";
+  json += "\"last_tag_data\":\"" + (state.lastTagData.length() > 0 ? state.lastTagData : "None") + "\"";
+  json += "\"attempt_write_tag\":\"" + attemptToWrite + "\"";
   json += "}";
 
   server.send(200, "application/json", json);
@@ -57,19 +58,14 @@ void handleStatus() {
 
 // Handles POST /write_rfid, storing the new UID
 void handleWriteRFID() {
-  if (server.hasArg("new_uid")) {
-    String newUID = server.arg("new_uid");
-    newUID.trim();
-    newUID.toUpperCase();
-    // Validate: must be 8 characters, hexadecimal
-    if (isValidHexUID(newUID)) {
-      state.newUID = newUID; // Store valid UID
-      server.send(200, "application/json", "{\"status\":\"success\",\"new_uid\":\"" + newUID + "\"}");
-    } else {
-      server.send(400, "application/json", "{\"error\":\"Invalid UID: Must be 8 hexadecimal characters (e.g., 1A2B3C4D)\"}");
-    }
+  if (server.hasArg("newTagData")) {
+    state.attemptToWrite = true;
+    String newTagData = server.arg("newTagData");
+    newTagData.trim();
+    state.newTagData = newTagData; // Store valid UID
+    server.send(200, "application/json", "{\"status\":\"success\",\"new_Tag_Data\":\"" + newTagData + "\"}");
   } else {
-    server.send(400, "application/json", "{\"error\":\"No UID provided\"}");
+    server.send(400, "application/json", "{\"error\":\"No newTagData provided\"}");
   }
 }
 
@@ -88,7 +84,7 @@ void handleRelay() {
       server.send(200, "application/json", "{\"status\":\"Relay turned on\"}");
     } else if (action == "off") {
       toggleRelay(false);
-      server.send(200, "application/json", "{\"error\":\"Relay turned off\"}");
+      server.send(200, "application/json", "{\"status\":\"Relay turned off\"}");
     } else {
       server.send(400, "application/json", "{\"error\":\"Invalid action: must be 'on' or 'off'\"}");
     }

@@ -16,6 +16,5 @@ extern void toggleRelay(bool on);
 // Function declarations for RC522 RFID operations
 void setupRFID();                // Initializes the RC522 RFID module
 void handleRFID();               // Checks for RFID cards and sends UID to InfluxDB
-bool writeUIDToTag(String newUID); // Writes a new UID to the detected tag
-
+void writeRfid(String data);
 #endif

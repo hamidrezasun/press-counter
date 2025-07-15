@@ -22,9 +22,11 @@ struct State {
   bool isDeviceInfoRequest;       // Flag indicating if request is for device info
   unsigned long requestStartTime;  // Start timestamp of the current request
   bool relayOn;                   // Relay status (true = on, false = off)
-  String lastUID;                 // Last read RFID card UID
   bool rfidConnected;             // RFID module connection status
-  String newUID;                  // UID to write to the next detected tag
+  String lastUID;                 // Last read RFID card UID
+  String lastTagData;
+  bool attemptToWrite;
+  String newTagData;
 };
 
 // External declaration of the global state variable
