@@ -24,9 +24,12 @@ struct State {
   bool relayOn;                   // Relay status (true = on, false = off)
   bool rfidConnected;             // RFID module connection status
   String lastUID;                 // Last read RFID card UID
-  String lastTagData;
-  bool attemptToWrite;
-  String newTagData;
+  String lastTagData;             // Last read RFID tag data
+  bool attemptToWrite;            // Flag indicating attempt to write to RFID
+  String newTagData;              // Data to write to RFID tag
+  String currentDieID;            // Current die ID stored in EEPROM
+  bool isRFIDRequest;             // Flag indicating if request is for RFID data
+  unsigned long lastTagReadTime;  // Timestamp of the last tag read for debouncing
 };
 
 // External declaration of the global state variable

@@ -13,7 +13,7 @@ class ESP8266Client(QMainWindow):
         self.setWindowTitle("ESP8266 RFID Controller")
         self.setGeometry(100, 100, 600, 400)
 
-        # Base URL of the ESP8266 (replace with actual IP or implement discovery)
+        # Base URL of the ESP8266
         self.base_url = "http://192.168.1.47"  # Default IP; update as needed
         self.auth = ("admin", "password")  # For /update endpoint
 
@@ -40,13 +40,14 @@ class ESP8266Client(QMainWindow):
 
         # Write Tag Data
         tag_layout = QHBoxLayout()
-        tag_layout.addWidget(QLabel("Die:"))
+        tag_layout.addWidget(QLabel("Tag Type:"))
         self.tag_type_combo = QComboBox()
         self.tag_type_combo.addItems(["die", "personnel"])
         tag_layout.addWidget(self.tag_type_combo)
         tag_layout.addWidget(QLabel("ID (max 10 chars):"))
         self.tag_id_input = QLineEdit()
         self.tag_id_input.setPlaceholderText("e.g., 593322")
+        self.tag_id_input.setMaxLength(10)
         tag_layout.addWidget(self.tag_id_input)
         self.write_tag_button = QPushButton("Write Tag Data")
         self.write_tag_button.clicked.connect(self.write_tag_data)
@@ -61,12 +62,6 @@ class ESP8266Client(QMainWindow):
         self.relay_off_button = QPushButton("Relay Off")
         self.relay_off_button.clicked.connect(lambda: self.control_relay("off"))
         control_layout.addWidget(self.relay_off_button)
-        self.counting_enable_button = QPushButton("Enable Counting")
-        self.counting_enable_button.clicked.connect(lambda: self.control_counting("enable"))
-        control_layout.addWidget(self.counting_enable_button)
-        self.counting_disable_button = QPushButton("Disable Counting")
-        self.counting_disable_button.clicked.connect(lambda: self.control_counting("disable"))
-        control_layout.addWidget(self.counting_disable_button)
         self.reset_button = QPushButton("Reset EEPROM")
         self.reset_button.clicked.connect(self.reset_eeprom)
         control_layout.addWidget(self.reset_button)
@@ -107,44 +102,38 @@ class ESP8266Client(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to fetch status: {str(e)}")
 
     def write_tag_data(self):
-        die = self.tag_type_combo.currentText()
+        tag_type = self.tag_type_combo.currentText()
         id_value = self.tag_id_input.text().strip()
 
         # Validate inputs
-        if len(die) == 0 or len(id_value) == 0:
-            QMessageBox.critical(self, "Error", "Die and ID cannot be empty")
+        if not id_value:
+            QMessageBox.critical(self, "Error", "ID cannot be empty")
             return
-        if len(die) > 30:
-            QMessageBox.critical(self, "Error", "Die must be 30 characters or less")
+        if len(id_value) > 10:
+            QMessageBox.critical(self, "Error", "ID must be 10 characters or less")
             return
-        if len(id_value) > 20:
-            QMessageBox.critical(self, "Error", "ID must be 20 characters or less")
-            return
-        # Ensure only printable ASCII characters (32-126)
-        if not all(32 <= ord(c) <= 126 for c in die + id_value):
-            QMessageBox.critical(self, "Error", "Die and ID must contain only printable ASCII characters")
+        # Ensure ID is alphanumeric
+        if not id_value.isalnum():
+            QMessageBox.critical(self, "Error", "ID must contain only alphanumeric characters")
             return
 
-        payload = {"die": die, "id": id_value}
-        print(f"Sending payload to {self.base_url}/write_tag: {payload}")  # Debug log
+        # Format as tagtype:id
+        new_tag_data = f"{tag_type}:{id_value}"
 
         try:
             response = requests.post(
-                f"{self.base_url}/write_tag",
-                headers={"Content-Type": "application/json"},
-                json=payload,
+                f"{self.base_url}/write_rfid",
+                data={"newTagData": new_tag_data},
                 timeout=5
             )
             response.raise_for_status()
             data = response.json()
-            QMessageBox.information(self, "Success", data.get("status", "Tag data written successfully"))
+            QMessageBox.information(self, "Success", data.get("status", f"Tag data written: {new_tag_data}"))
         except requests.exceptions.HTTPError as e:
             error_message = f"HTTP error: {str(e)}"
             try:
                 error_data = e.response.json()
                 error_message += f"\nDetails: {error_data.get('error', 'No details provided')}"
-                if 'details' in error_data:
-                    error_message += f"\n{error_data['details']}"
             except ValueError:
                 error_message += f"\nResponse: {e.response.text}"
             QMessageBox.critical(self, "Error", error_message)
@@ -158,14 +147,6 @@ class ESP8266Client(QMainWindow):
             QMessageBox.information(self, "Success", response.json().get("status", f"Relay {action}"))
         except requests.RequestException as e:
             QMessageBox.critical(self, "Error", f"Failed to control relay: {str(e)}")
-
-    def control_counting(self, action):
-        try:
-            response = requests.post(f"{self.base_url}/counting", data={"action": action}, timeout=5)
-            response.raise_for_status()
-            QMessageBox.information(self, "Success", response.json().get("status", f"Counting {action}d"))
-        except requests.RequestException as e:
-            QMessageBox.critical(self, "Error", f"Failed to control counting: {str(e)}")
 
     def reset_eeprom(self):
         try:

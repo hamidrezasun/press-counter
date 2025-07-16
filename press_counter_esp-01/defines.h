@@ -2,7 +2,7 @@
 #define DEFINES_H
 
 // Configuration settings for the device and InfluxDB connection
-#define DEVICE "TEST"              // Unique identifier for the device
+#define DEVICE "hydraulic_press"       // Unique identifier for the device
 #define WIFI_SSID "TW factory"         // WiFi network SSID
 #define WIFI_PASSWORD "e8cac589tw"     // WiFi network password
 #define INFLUXDB_URL "http://192.168.1.37:8086" // InfluxDB server URL
@@ -28,7 +28,7 @@
 #define HTTP_REQUEST_TIMEOUT 0.3       // Timeout for asyncHTTPrequest in seconds
 
 // EEPROM settings for persistent storage
-#define EEPROM_SIZE 16                 // Size of EEPROM allocation in bytes
+#define EEPROM_SIZE 32                 // Size of EEPROM allocation in bytes
 #define INIT_MARKER 0xAA               // Marker to indicate initialized EEPROM
 
 #endif

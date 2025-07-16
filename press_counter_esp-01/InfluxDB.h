@@ -12,6 +12,8 @@ extern ESP8266WiFiMulti wifiMulti;    // WiFi multi-connection manager
 
 // Function declarations for sending data to InfluxDB
 bool sendTo();                       // Sends pulse data to InfluxDB
-void sendDeviceInfo();                // Sends device information to InfluxDB
+void sendDeviceInfo();               // Sends device information to InfluxDB
+bool sendRFIDData();                 // Sends RFID personnel data to InfluxDB
+void onRequestResponse(void* opt, asyncHTTPrequest* req, int readyState); // Handles HTTP request responses
 
 #endif

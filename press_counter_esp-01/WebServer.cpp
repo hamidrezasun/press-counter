@@ -49,7 +49,8 @@ void handleStatus() {
   json += "\"min_pulse_duration\":" + String(MIN_PULSE_TRAIN_DURATION) + ",";
   json += "\"rfid_status\":\"" + rfidStatus + "\",";
   json += "\"last_uid\":\"" + (state.lastUID.length() > 0 ? state.lastUID : "None") + "\",";
-  json += "\"last_tag_data\":\"" + (state.lastTagData.length() > 0 ? state.lastTagData : "None") + "\"";
+  json += "\"last_tag_data\":\"" + (state.lastTagData.length() > 0 ? state.lastTagData : "None") + "\",";
+  json += "\"current_die_id\":\"" + (state.currentDieID.length() > 0 ? state.currentDieID : "None") + "\",";
   json += "\"attempt_write_tag\":\"" + attemptToWrite + "\"";
   json += "}";
 
