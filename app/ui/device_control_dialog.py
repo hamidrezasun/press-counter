@@ -1,14 +1,13 @@
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog, QMessageBox
 from PyQt6.QtCore import Qt
-from device_api.device_api import get_device_status, toggle_relay, reset_eeprom, write_rfid, update_firmware
-from PyQt6.QtWidgets import QMessageBox
+from device_api.device_api import get_device_status, toggle_relay, reset_eeprom, write_rfid, update_firmware, set_die_id
 
 class DeviceControlDialog(QDialog):
     """Dialog for controlling device via API."""
     def __init__(self, device_ip, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Device Control")
-        self.setGeometry(200, 200, 400, 500)
+        self.setGeometry(200, 200, 400, 600)
         self.device_ip = device_ip
 
         layout = QVBoxLayout()
@@ -62,14 +61,26 @@ class DeviceControlDialog(QDialog):
         rfid_layout = QHBoxLayout()
         self.rfid_uid_label = QLabel("New RFID UID:")
         self.rfid_uid_entry = QLineEdit()
-        self.rfid_uid_entry.setPlaceholderText("e.g., 1A2B3C4D")
-        self.rfid_uid_entry.setMaximumWidth(100)
+        self.rfid_uid_entry.setPlaceholderText("e.g., personnel:1A2B3C4D")
+        self.rfid_uid_entry.setMaximumWidth(150)
         self.write_rfid_button = QPushButton("Write RFID")
         self.write_rfid_button.clicked.connect(self.write_rfid_uid)
         rfid_layout.addWidget(self.rfid_uid_label)
         rfid_layout.addWidget(self.rfid_uid_entry)
         rfid_layout.addWidget(self.write_rfid_button)
         layout.addLayout(rfid_layout)
+
+        die_id_layout = QHBoxLayout()
+        self.die_id_label = QLabel("New Die ID:")
+        self.die_id_entry = QLineEdit()
+        self.die_id_entry.setPlaceholderText("e.g., DIE123")
+        self.die_id_entry.setMaximumWidth(150)
+        self.set_die_id_button = QPushButton("Set Die ID")
+        self.set_die_id_button.clicked.connect(self.set_die_id)
+        die_id_layout.addWidget(self.die_id_label)
+        die_id_layout.addWidget(self.die_id_entry)
+        die_id_layout.addWidget(self.set_die_id_button)
+        layout.addLayout(die_id_layout)
 
         self.firmware_button = QPushButton("Update Firmware")
         self.firmware_button.clicked.connect(self.update_firmware)
@@ -78,7 +89,7 @@ class DeviceControlDialog(QDialog):
         self.status_label = QTextEdit("")
         self.status_label.setObjectName("statusLabel")
         self.status_label.setReadOnly(True)
-        self.status_label.setMinimumHeight(200)
+        self.status_label.setMinimumHeight(250)
         layout.addWidget(self.status_label)
 
         close_button = QPushButton("Close")
@@ -102,11 +113,12 @@ class DeviceControlDialog(QDialog):
                 f"<b>Last Send Duration:</b> {status.get('last_send_duration', 'N/A')} ms<br>"
                 f"<b>Max Send Duration:</b> {status.get('max_send_duration', 'N/A')} ms<br>"
                 f"<b>Last Short Pulse Duration:</b> {status.get('last_short_pulse_duration', 'N/A')} ms<br>"
-                f"<b>Last Short Pulse Time:</b> {status.get('last_short_pulse_time', 'N/A')}<br>"
                 f"<b>Min Pulse Duration:</b> {status.get('min_pulse_duration', 'N/A')} ms<br>"
                 f"<b>RFID Status:</b> {status.get('rfid_status', 'N/A')}<br>"
                 f"<b>Last UID:</b> {status.get('last_uid', 'N/A')}<br>"
-                f"<b>New UID:</b> {status.get('new_uid', 'N/A')}"
+                f"<b>Last Tag Data:</b> {status.get('last_tag_data', 'N/A')}<br>"
+                f"<b>Current Die ID:</b> {status.get('current_die_id', 'N/A')}<br>"
+                f"<b>Attempt Write Tag:</b> {status.get('attempt_write_tag', 'N/A')}"
             )
             self.status_label.setText(status_text)
         else:
@@ -133,13 +145,31 @@ class DeviceControlDialog(QDialog):
     def write_rfid_uid(self):
         """Writes a new RFID UID via API."""
         new_uid = self.rfid_uid_entry.text().strip().upper()
-        if not new_uid or len(new_uid) != 8 or not all(c in '0123456789ABCDEF' for c in new_uid):
-            QMessageBox.warning(self, "Invalid UID", "UID must be an 8-character hexadecimal value (e.g., 1A2B3C4D).")
+        if not new_uid or new_uid.count(':') != 1 or not (new_uid.startswith('die:') or new_uid.startswith('personnel:')):
+            QMessageBox.warning(self, "Invalid UID", "UID must be in format 'die:ID' or 'personnel:ID' (e.g., personnel:1A2B3C4D).")
+            return
+        tag_type, id_part = new_uid.split(':')
+        if len(id_part) > 15 or not all(c in '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ' for c in id_part):
+            QMessageBox.warning(self, "Invalid UID", "ID part must be alphanumeric, up to 15 characters.")
             return
         success, message = write_rfid(self.device_ip, new_uid)
         if success:
             QMessageBox.information(self, "Success", message)
             self.rfid_uid_entry.clear()
+            self.fetch_device_status()
+        else:
+            QMessageBox.critical(self, "Error", message)
+
+    def set_die_id(self):
+        """Sets a new die ID via API."""
+        die_id = self.die_id_entry.text().strip().upper()
+        if not die_id or len(die_id) > 15 or not all(c in '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ' for c in die_id):
+            QMessageBox.warning(self, "Invalid Die ID", "Die ID must be alphanumeric, 1-15 characters (e.g., DIE123).")
+            return
+        success, message = set_die_id(self.device_ip, die_id)
+        if success:
+            QMessageBox.information(self, "Success", message)
+            self.die_id_entry.clear()
             self.fetch_device_status()
         else:
             QMessageBox.critical(self, "Error", message)

@@ -118,7 +118,7 @@ void handleRFID() {
                   saveCountsToEEPROM();
                 } else if (tagType == "personnel") {
                   // Trigger InfluxDB send for personnel data
-                  state.shouldSend = true;
+                  sendRFIDData();
                   // Store personnel ID in lastTagData
                   state.lastTagData = text;
                 }

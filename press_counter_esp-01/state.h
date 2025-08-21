@@ -11,7 +11,6 @@ struct State {
   unsigned long lastPulseDuration; // Duration of the last valid pulse
   unsigned long lastSendDuration_ms; // Duration of the last send attempt
   unsigned long lastShortPulseDuration; // Duration of the last short pulse
-  unsigned long lastShortPulseTime; // Timestamp of the last short pulse
   unsigned long lastEdgeTime;      // Timestamp of the last edge detection
   unsigned long pulseTrainStart;   // Start timestamp of the current pulse train
   unsigned long lastSendAttempt;   // Timestamp of the last send attempt

@@ -16,7 +16,7 @@ ESP8266HTTPUpdateServer httpUpdater; // HTTP server for firmware updates
 asyncHTTPrequest request;            // Asynchronous HTTP request handler
 
 // Global state variable to track device status and pulse counts
-State state = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false, false, false, 0, false, false, "", "", false, "", "", false, 0};
+State state = {0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false, false, false, 0, false, false, "", "", false, "", "", false, 0};
 
 // Toggles the relay on or off and updates state
 void toggleRelay(bool on) {
@@ -26,7 +26,7 @@ void toggleRelay(bool on) {
 
 // Detects and processes pulse trains from the input pin
 void handlePulseTrain() {
-  static int lastState = LOW; // Last state of the input pin
+  static int lastState = HIGH; // Last state of the input pin
   int currentState = digitalRead(INPUT_PIN); // Current state of the input pin
 
   // Detect edge change
@@ -48,23 +48,19 @@ void handlePulseTrain() {
     if (duration >= MIN_PULSE_TRAIN_DURATION) {
       state.pulseCount++; // Increment pulse count
       state.lastPulseDuration = duration; // Record duration
-      if (state.pulseCount % REPORT_INTERVAL == 0) {
-        state.shouldSend = true; // Trigger send to InfluxDB
-      }
+      state.shouldSend = true; // Trigger send to InfluxDB
     } else {
       // Record short pulse
       state.lastShortPulseDuration = duration;
-      state.lastShortPulseTime = millis();
     }
   }
 }
 
 // Initializes the device and sets up peripherals
 void setup() {
-  ESP.wdtEnable(8000); // Enable watchdog timer with 8-second timeout
   pinMode(INPUT_PIN, INPUT); // Configure pulse input pin
   pinMode(RELAY_PIN, OUTPUT); // Configure relay pin as output
-  toggleRelay(false); // Initialize relay to off
+  toggleRelay(true); // Initialize relay to off
  
   loadCountsFromEEPROM(); // Load saved counts from EEPROM
 
@@ -92,22 +88,18 @@ void setup() {
 // Main loop to handle web server, pulse detection, RFID, and data sending
 void loop() {
   server.handleClient(); // Process web server requests
-  handlePulseTrain(); // Process pulse input
+  
+  // Call handlePulseTrain if relay is off and personnel ID is set, or always for normal pulse detection
+  if (!state.relayOn && state.lastTagData.startsWith("personnel:")) {
+    handlePulseTrain(); // Process pulse input
+  }
+  
   if (!state.attemptToWrite) {
     handleRFID(); // Process RFID card reads
   } else {
     writeRfid(state.newTagData);
   }
+  
   // Check if data should be sent to InfluxDB
-  if (state.shouldSend && !state.inPulseTrain && !state.requestInProgress) {
-    if (millis() - state.lastSendAttempt >= SEND_RETRY_INTERVAL) {
-      if (state.lastTagData.startsWith("personnel:") && (state.relayOn == true)) {
-        sendTo(); // Send any remaining pulse counts first
-      } else if (state.lastTagData.startsWith("personnel:")) {
-        sendRFIDData(); // Send RFID data after pulse counts
-      } else {
-        sendTo(); // Send pulse counts if no RFID data
-      }
-    }
-  }
+  if (state.shouldSend && !state.inPulseTrain && !state.requestInProgress) sendTo(); 
 }
