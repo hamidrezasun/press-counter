@@ -6,6 +6,7 @@
 #include "ConfigManager.h"
 #include "ControlManager.h"
 #include "NfcManager.h"
+#include "PressCounter.h" // Include PressCounter header
 
 struct CallbackData {
   ConfigManager* configManager;
@@ -14,7 +15,7 @@ struct CallbackData {
 
 class WebServerManager {
 public:
-  WebServerManager(ESP8266WebServer& srv, ConfigManager& cfg, ControlManager& ctrl, NfcManager& nfc);
+  WebServerManager(ESP8266WebServer& srv, ConfigManager& cfg, ControlManager& ctrl, NfcManager& nfc, PressCounter& pc);
   void begin();
   void updateStatus();
   void handleClient();
@@ -24,8 +25,9 @@ private:
   ConfigManager& configManager;
   ControlManager& controlManager;
   NfcManager& nfcManager;
+  PressCounter& pressCounter; // Add PressCounter reference
   String lastTagData;
-  File uploadFile; // Member variable to persist file handle
+  File uploadFile;
   void setupRoutes();
   void handleRoot();
   void handleUploadHtml();
@@ -40,6 +42,7 @@ private:
   void handleUploadFirmware();
   void handleFileStatus();
   void handleGetSettings();
+  void handlePressCounterStatus(); // New method for press counter status
 };
 
 #endif

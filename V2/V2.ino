@@ -12,9 +12,9 @@ WiFiClient wifiClient;
 ConfigManager configManager;
 ControlManager controlManager(configManager);
 NfcManager nfcManager;
-WebServerManager webManager(server, configManager, controlManager, nfcManager);
 InfluxDB influxDB(configManager);
-PressCounter pressCounter(PRESS_SENSOR_PIN,influxDB);
+PressCounter pressCounter(PRESS_SENSOR_PIN, influxDB);
+WebServerManager webManager(server, configManager, controlManager, nfcManager, pressCounter); // Pass pressCounter
 
 void setup() {
   Serial.begin(74880);
@@ -33,7 +33,6 @@ void setup() {
 
   WiFi.begin(SSID, PASSWORD);
 
-  // Wait until connected
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
@@ -42,12 +41,13 @@ void setup() {
   Serial.println("");
   Serial.println("WiFi connected!");
   Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());  // Print assigned IP
+  Serial.println(WiFi.localIP());
   if (WiFi.status() == WL_CONNECTED) {
     influxDB.sendDeviceInfo();
   } else {
     controlManager.playErrorSound();
   }
+  controlManager.playSuccessSound();
 }
 
 void loop() {
@@ -56,13 +56,10 @@ void loop() {
   controlManager.buzzerLoop();
   pressCounter.handle();
   
-  // Handle NFC read/write
   if (nfcManager.handleNfcLoop()) {
-    // Write successful
-    webManager.updateStatus(); // Update UI to reflect written data
+    webManager.updateStatus();
     controlManager.playSuccessSound();
   } else if (strlen(nfcManager.getLastTagData()) > 0) {
-    // Tag read, update UI
     webManager.updateStatus();
   }
   

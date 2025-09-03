@@ -2,8 +2,8 @@
 #include <FS.h>
 #include <ESP8266WiFi.h>
 
-WebServerManager::WebServerManager(ESP8266WebServer& srv, ConfigManager& cfg, ControlManager& ctrl, NfcManager& nfc)
-  : server(srv), configManager(cfg), controlManager(ctrl), nfcManager(nfc), lastTagData("No tag read") {
+WebServerManager::WebServerManager(ESP8266WebServer& srv, ConfigManager& cfg, ControlManager& ctrl, NfcManager& nfc, PressCounter& pc)
+  : server(srv), configManager(cfg), controlManager(ctrl), nfcManager(nfc), pressCounter(pc), lastTagData("No tag read") {
 }
 
 void WebServerManager::setupRoutes() {
@@ -12,11 +12,9 @@ void WebServerManager::setupRoutes() {
     "/upload",
     HTTP_POST,
     [this]() {
-      // This runs after the upload is complete
       server.send(200, "text/plain", "Upload complete");
     },
     [this]() {
-      // This runs during the upload process
       handleUploadHtml();
     }
   );
@@ -57,6 +55,18 @@ void WebServerManager::setupRoutes() {
     yield();
   });
   server.on("/status/file", HTTP_GET, std::bind(&WebServerManager::handleFileStatus, this));
+  server.on("/press_counter", HTTP_GET, std::bind(&WebServerManager::handlePressCounterStatus, this));
+}
+
+void WebServerManager::handlePressCounterStatus() {
+  String json = "{";
+  json += "\"count\":" + String(pressCounter.getCount()) + ",";
+  json += "\"lastPulseDuration\":" + String(pressCounter.getLastPulseDuration()) + ",";
+  json += "\"lastPulseTime\":" + String(pressCounter.getLastPulseTime()) + ",";
+  json += "\"inPulseTrain\":" + String(pressCounter.getInPulseTrain() ? "true" : "false") + ",";
+  json += "\"pulseTrainStart\":" + String(pressCounter.getPulseTrainStart());
+  json += "}";
+  server.send(200, "application/json", json);
 }
 
 void WebServerManager::handleGetSettings() {
@@ -102,62 +112,30 @@ void WebServerManager::handleUploadHtml() {
   if (upload.status == UPLOAD_FILE_START) {
     Serial.printf("Uploading: %s, Size: %u\n", upload.filename.c_str(), upload.totalSize);
     if (upload.filename.isEmpty()) {
-      Serial.println("No file selected for upload");
       server.send(400, "text/plain", "No file selected");
       return;
     }
-    FSInfo fs_info;
-    SPIFFS.info(fs_info);
-    Serial.printf("SPIFFS Free: %u, File Size: %u\n", fs_info.totalBytes - fs_info.usedBytes, upload.totalSize);
-    if (fs_info.totalBytes - fs_info.usedBytes < upload.totalSize) {
-      Serial.println("Insufficient SPIFFS space");
-      server.send(507, "text/plain", "Insufficient storage space");
-      return;
-    }
-    if (uploadFile) {
-      uploadFile.close();
-    }
     uploadFile = SPIFFS.open("/index.html", "w");
     if (!uploadFile) {
-      Serial.println("Failed to open index.html for writing");
-      server.send(500, "text/plain", "Failed to open file for writing");
+      Serial.println("Failed to open file for writing");
+      server.send(500, "text/plain", "Failed to open file");
       return;
     }
-    Serial.println("File opened successfully");
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (uploadFile) {
-      size_t bytesWritten = uploadFile.write(upload.buf, upload.currentSize);
-      if (bytesWritten != upload.currentSize) {
-        Serial.printf("File write error: wrote %u of %u bytes\n", bytesWritten, upload.currentSize);
-        uploadFile.close();
-        server.send(500, "text/plain", "File write error");
-        return;
-      }
-    } else {
-      Serial.println("File handle invalid during write");
-      server.send(500, "text/plain", "File handle invalid during write");
-      return;
+      uploadFile.write(upload.buf, upload.currentSize);
     }
   } else if (upload.status == UPLOAD_FILE_END) {
     if (uploadFile) {
       uploadFile.close();
-      Serial.printf("Upload Success: %u bytes\n", upload.totalSize);
-    } else {
-      Serial.println("File handle invalid at upload end");
-      server.send(500, "text/plain", "File upload failed");
-      return;
+      Serial.println("File uploaded successfully");
     }
   }
-  yield();
 }
 
 void WebServerManager::handleSaveSettings() {
-  Config config = configManager.get();
   bool updated = false;
-  Serial.println("Received POST /save with arguments:");
-  for (uint8_t i = 0; i < server.args(); i++) {
-    Serial.printf("Arg %s: %s\n", server.argName(i).c_str(), server.arg(i).c_str());
-  }
+  Config config = configManager.get();
   if (server.hasArg("device") && server.arg("device").length() > 0) {
     strlcpy(config.device, server.arg("device").c_str(), sizeof(config.device));
     updated = true;
@@ -187,8 +165,8 @@ void WebServerManager::handleSaveSettings() {
     updated = true;
   }
   if (updated) {
-    configManager.set(config); // Update the internal config
-    if (configManager.save()) { // Call save without passing config
+    configManager.set(config);
+    if (configManager.save()) {
       Serial.println("Configuration saved successfully");
       server.send(200, "text/plain", "Settings saved");
     } else {
