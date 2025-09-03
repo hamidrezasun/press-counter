@@ -5,16 +5,15 @@
 #include <ArduinoJson.h>
 #include <FS.h>
 
+
 struct Config {
-  String device;
-  String influxHost;
+  char device[10];
+  char influxHost[20];
   int influxPort;
-  String influxBucket;
-  String influxOrg;
-  String influxToken;
-  String ntp;
+  char influxBucket[20];
+  char influxOrg[20];
+  char influxToken[90];
   int debounceDelay;
-  String firmwareUrl;
 };
 
 class ConfigManager {
@@ -24,7 +23,7 @@ public:
   bool save();
   void setDefaults();
   Config& get();
-
+  void set(const Config& newConfig);
 private:
   const char* _filename;
   Config config;

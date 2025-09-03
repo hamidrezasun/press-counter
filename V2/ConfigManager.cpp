@@ -26,15 +26,15 @@ bool ConfigManager::load() {
     setDefaults();
     return false;
   }
-  config.device = doc["device"] | "";
-  config.influxHost = doc["influxHost"] | "";
+  
+  strlcpy(config.device, doc["device"] | "device", 10);
+  strlcpy(config.influxHost, doc["influxHost"] | "", 20);
   config.influxPort = doc["influxPort"] | 8086;
-  config.influxBucket = doc["influxBucket"] | "";
-  config.influxOrg = doc["influxOrg"] | "";
-  config.influxToken = doc["influxToken"] | "";
-  config.ntp = doc["ntp"] | "";
+  strlcpy(config.influxBucket, doc["influxBucket"] | "", 20);
+  strlcpy(config.influxOrg, doc["influxOrg"] | "", 20);
+  strlcpy(config.influxToken, doc["influxToken"] | "", 90);
   config.debounceDelay = doc["debounceDelay"] | 0;
-  config.firmwareUrl = doc["firmwareUrl"] | "http://server/file.bin";
+  
   return true;
 }
 
@@ -46,9 +46,8 @@ bool ConfigManager::save() {
   doc["influxBucket"] = config.influxBucket;
   doc["influxOrg"] = config.influxOrg;
   doc["influxToken"] = config.influxToken;
-  doc["ntp"] = config.ntp;
   doc["debounceDelay"] = config.debounceDelay;
-  doc["firmwareUrl"] = config.firmwareUrl;
+  
   File file = SPIFFS.open(_filename, "w");
   if (!file) {
     Serial.println("Failed to open config file for writing");
@@ -61,15 +60,17 @@ bool ConfigManager::save() {
 }
 
 void ConfigManager::setDefaults() {
-  config.device = "device";
-  config.influxHost = "";
+  strlcpy(config.device, "device", 10);
+  strlcpy(config.influxHost, "", 20);
   config.influxPort = 8086;
-  config.influxBucket = "";
-  config.influxOrg = "";
-  config.influxToken = "";
-  config.ntp = "";
+  strlcpy(config.influxBucket, "", 20);
+  strlcpy(config.influxOrg, "", 20);
+  strlcpy(config.influxToken, "", 90);
   config.debounceDelay = 0;
-  config.firmwareUrl = "http://server/file.bin";
 }
 
 Config& ConfigManager::get() { return config; }
+
+void ConfigManager::set(const Config& newConfig) {
+  config = newConfig;
+}

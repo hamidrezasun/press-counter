@@ -1,245 +1,287 @@
 #include "WebServerManager.h"
-#include <ESP8266httpUpdate.h>
 #include <FS.h>
+#include <ESP8266WiFi.h>
 
-static CallbackData deviceData, influxHostData, influxPortData, influxBucketData,
-                   influxOrgData, influxTokenData, ntpData,
-                   debounceDelayData, firmwareUrlData;
-
-WebServerManager::WebServerManager(AsyncWebServer& srv, ConfigManager& cfg, ControlManager& ctrl, NfcManager& nfc)
-  : server(srv), configManager(cfg), controlManager(ctrl), nfcManager(nfc), relayLabelId(0), buzzerLabelId(0), 
-    buttonLabelId(0), tagDataLabelId(0), deviceNameId(0), influxHostId(0), influxPortId(0), influxBucketId(0), 
-    influxOrgId(0), influxTokenId(0), ntpId(0), debounceDelayId(0), firmwareUrlId(0), firmwareUploadStatusId(0),
-    firmwareUploadButtonId(0) {}
-
-void WebServerManager::onSaveSettings(Control* control, int id, void* userData) {
-  CallbackData* data = static_cast<CallbackData*>(userData);
-  ConfigManager* cm = data->configManager;
-  Config& config = cm->get();
-
-  switch (data->id) {
-    case 1: // Device Name
-      config.device = control->value;
-      break;
-    case 2: // InfluxDB Host
-      config.influxHost = control->value;
-      break;
-    case 3: // InfluxDB Port
-      config.influxPort = control->value.toInt();
-      break;
-    case 4: // InfluxDB Bucket
-      config.influxBucket = control->value;
-      break;
-    case 5: // InfluxDB Organization
-      config.influxOrg = control->value;
-      break;
-    case 6: // InfluxDB Token
-      config.influxToken = control->value;
-      break;
-    case 7: // NTP Server
-      config.ntp = control->value;
-      break;
-    case 8: // Debounce Delay
-      config.debounceDelay = control->value.toInt();
-      break;
-    case 9: // Firmware URL
-      config.firmwareUrl = control->value;
-      break;
-  }
-  cm->save();
+WebServerManager::WebServerManager(ESP8266WebServer& srv, ConfigManager& cfg, ControlManager& ctrl, NfcManager& nfc)
+  : server(srv), configManager(cfg), controlManager(ctrl), nfcManager(nfc), lastTagData("No tag read") {
 }
 
-void WebServerManager::onRelayToggle(Control* control, int id, void* userData) {
-  ControlManager* cm = static_cast<ControlManager*>(userData);
-  cm->setRelayState(false, true); // Toggle relay
-}
-
-void WebServerManager::onBuzzerError(Control* control, int id, void* userData) {
-  ControlManager* cm = static_cast<ControlManager*>(userData);
-  if (control->value.toInt() == 1) {
-    cm->playErrorSound();
-  }
-}
-
-void WebServerManager::onBuzzerWarning(Control* control, int id, void* userData) {
-  ControlManager* cm = static_cast<ControlManager*>(userData);
-  if (control->value.toInt() == 1) {
-    cm->playWarningSound();
-  }
-}
-
-void WebServerManager::onBuzzerSuccess(Control* control, int id, void* userData) {
-  ControlManager* cm = static_cast<ControlManager*>(userData);
-  if (control->value.toInt() == 1) {
-    cm->playSuccessSound();
-  }
-}
-
-void WebServerManager::onWriteTag(Control* control, int id, void* userData) {
-  WebServerManager* wm = static_cast<WebServerManager*>(userData);
-  if (control->value.toInt() == 1) {
-    String text = ESPUI.getControl(control->id - 1)->value; // Text input is previous control
-    if (text.isEmpty()) {
-      ESPUI.updateLabel(wm->tagDataLabelId, "No data provided to write");
-      wm->controlManager.playErrorSound();
-    } else {
-      wm->nfcManager.setPendingWrite(text);
-      ESPUI.updateLabel(wm->tagDataLabelId, "Waiting for NFC tag...");
+void WebServerManager::setupRoutes() {
+  server.on("/", HTTP_GET, std::bind(&WebServerManager::handleRoot, this));
+  server.on(
+    "/upload",
+    HTTP_POST,
+    [this]() {
+      // This runs after the upload is complete
+      server.send(200, "text/plain", "Upload complete");
+    },
+    [this]() {
+      // This runs during the upload process
+      handleUploadHtml();
     }
-  }
+  );
+  server.on("/save", HTTP_GET, std::bind(&WebServerManager::handleGetSettings, this));
+  server.on("/save", HTTP_POST, std::bind(&WebServerManager::handleSaveSettings, this));
+  server.on("/relay", HTTP_POST, std::bind(&WebServerManager::handleRelayToggle, this));
+  server.on("/buzzer_error", HTTP_POST, std::bind(&WebServerManager::handleBuzzerError, this));
+  server.on("/buzzer_warning", HTTP_POST, std::bind(&WebServerManager::handleBuzzerWarning, this));
+  server.on("/buzzer_success", HTTP_POST, std::bind(&WebServerManager::handleBuzzerSuccess, this));
+  server.on("/write_tag", HTTP_POST, std::bind(&WebServerManager::handleWriteTag, this));
+  server.on("/status", HTTP_GET, std::bind(&WebServerManager::handleStatus, this));
+  server.on("/update", HTTP_GET, std::bind(&WebServerManager::handleUpdate, this));
+  server.on("/update", HTTP_POST, [this]() {
+    server.sendHeader("Connection", "close");
+    server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
+    ESP.restart();
+  }, [this]() {
+    HTTPUpload& upload = server.upload();
+    if (upload.status == UPLOAD_FILE_START) {
+      Serial.setDebugOutput(true);
+      Serial.printf("Update: %s\n", upload.filename.c_str());
+      uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+      if (!Update.begin(maxSketchSpace)) {
+        Update.printError(Serial);
+      }
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+      if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+        Update.printError(Serial);
+      }
+    } else if (upload.status == UPLOAD_FILE_END) {
+      if (Update.end(true)) {
+        Serial.printf("Update Success: %u\nRebooting...\n", upload.totalSize);
+      } else {
+        Update.printError(Serial);
+      }
+      Serial.setDebugOutput(false);
+    }
+    yield();
+  });
+  server.on("/status/file", HTTP_GET, std::bind(&WebServerManager::handleFileStatus, this));
 }
 
-void WebServerManager::onFirmwareUploadButton(Control* control, int id, void* userData) {
-  WebServerManager* wm = static_cast<WebServerManager*>(userData);
-  if (control->value.toInt() == 1) {
-    ESPUI.updateLabel(wm->firmwareUploadStatusId, "Please visit /upload-form to upload firmware");
-  }
+void WebServerManager::handleGetSettings() {
+  Config config = configManager.get();
+  String json = "{";
+  json += "\"device\":\"" + String(config.device) + "\",";
+  json += "\"influxHost\":\"" + String(config.influxHost) + "\",";
+  json += "\"influxPort\":" + String(config.influxPort) + ",";
+  json += "\"influxBucket\":\"" + String(config.influxBucket) + "\",";
+  json += "\"influxOrg\":\"" + String(config.influxOrg) + "\",";
+  json += "\"influxToken\":\"" + String(config.influxToken) + "\",";
+  json += "\"debounceDelay\":" + String(config.debounceDelay);
+  json += "}";
+  server.send(200, "application/json", json);
 }
 
-void WebServerManager::handleFileUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
-  static File uploadFile;
-  
-  if (!index) { // Start of upload
-    if (!filename.endsWith(".bin")) {
-      ESPUI.updateLabel(firmwareUploadStatusId, "Invalid file type. Please upload a .bin file");
-      controlManager.playErrorSound();
-      request->send(400, "text/plain", "Invalid file type");
+void WebServerManager::handleRoot() {
+  if (SPIFFS.exists("/index.html")) {
+    File file = SPIFFS.open("/index.html", "r");
+    if (!file) {
+      Serial.println("Failed to open index.html for reading");
+      server.send(500, "text/plain", "Failed to open file");
       return;
     }
-    if (!SPIFFS.begin()) {
-      ESPUI.updateLabel(firmwareUploadStatusId, "Failed to mount SPIFFS");
-      controlManager.playErrorSound();
-      request->send(500, "text/plain", "Failed to mount SPIFFS");
+    server.streamFile(file, "text/html");
+    file.close();
+  } else {
+    Serial.println("index.html not found in SPIFFS");
+    String html = "<!DOCTYPE html><html><head><title>Upload Interface</title>";
+    html += "<style>body{font-family:Arial,sans-serif;padding:20px}.control{margin:10px 0}input,button{padding:8px;margin:5px}</style>";
+    html += "<h2>No Interface Found</h2>";
+    html += "<p>Please upload an index.html file to customize the interface.</p>";
+    html += "<form action='/upload' method='POST' enctype='multipart/form-data'>";
+    html += "<div class='control'><input type='file' name='htmlFile' accept='.html'></div>";
+    html += "<div class='control'><button type='submit'>Upload HTML</button></div>";
+    html += "</form></body></html>";
+    server.send(200, "text/html", html);
+  }
+}
+
+void WebServerManager::handleUploadHtml() {
+  HTTPUpload& upload = server.upload();
+  if (upload.status == UPLOAD_FILE_START) {
+    Serial.printf("Uploading: %s, Size: %u\n", upload.filename.c_str(), upload.totalSize);
+    if (upload.filename.isEmpty()) {
+      Serial.println("No file selected for upload");
+      server.send(400, "text/plain", "No file selected");
       return;
     }
-    uploadFile = SPIFFS.open("/firmware.bin", "w");
+    FSInfo fs_info;
+    SPIFFS.info(fs_info);
+    Serial.printf("SPIFFS Free: %u, File Size: %u\n", fs_info.totalBytes - fs_info.usedBytes, upload.totalSize);
+    if (fs_info.totalBytes - fs_info.usedBytes < upload.totalSize) {
+      Serial.println("Insufficient SPIFFS space");
+      server.send(507, "text/plain", "Insufficient storage space");
+      return;
+    }
+    if (uploadFile) {
+      uploadFile.close();
+    }
+    uploadFile = SPIFFS.open("/index.html", "w");
     if (!uploadFile) {
-      ESPUI.updateLabel(firmwareUploadStatusId, "Failed to open file for writing");
-      controlManager.playErrorSound();
-      request->send(500, "text/plain", "Failed to open file");
-      SPIFFS.end();
+      Serial.println("Failed to open index.html for writing");
+      server.send(500, "text/plain", "Failed to open file for writing");
       return;
     }
-    ESPUI.updateLabel(firmwareUploadStatusId, "Uploading firmware...");
-  }
-
-  if (len) { // Write data chunk
-    uploadFile.write(reinterpret_cast<char*>(data), len);
-  }
-
-  if (final) { // End of upload
-    uploadFile.close();
-    SPIFFS.end();
-    
-    WiFiClient client;
-    t_httpUpdate_return ret = ESPhttpUpdate.update(client, "/firmware.bin");
-    if (ret == HTTP_UPDATE_OK) {
-      ESPUI.updateLabel(firmwareUploadStatusId, "Firmware update successful");
-      controlManager.playSuccessSound();
-      request->send(200, "text/plain", "Firmware update successful");
+    Serial.println("File opened successfully");
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (uploadFile) {
+      size_t bytesWritten = uploadFile.write(upload.buf, upload.currentSize);
+      if (bytesWritten != upload.currentSize) {
+        Serial.printf("File write error: wrote %u of %u bytes\n", bytesWritten, upload.currentSize);
+        uploadFile.close();
+        server.send(500, "text/plain", "File write error");
+        return;
+      }
     } else {
-      ESPUI.updateLabel(firmwareUploadStatusId, "Firmware update failed: " + String(ESPhttpUpdate.getLastErrorString()));
-      controlManager.playErrorSound();
-      request->send(500, "text/plain", "Firmware update failed: " + ESPhttpUpdate.getLastErrorString());
+      Serial.println("File handle invalid during write");
+      server.send(500, "text/plain", "File handle invalid during write");
+      return;
+    }
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (uploadFile) {
+      uploadFile.close();
+      Serial.printf("Upload Success: %u bytes\n", upload.totalSize);
+    } else {
+      Serial.println("File handle invalid at upload end");
+      server.send(500, "text/plain", "File upload failed");
+      return;
     }
   }
+  yield();
 }
 
-void WebServerManager::updateStatus() {
+void WebServerManager::handleSaveSettings() {
+  Config config = configManager.get();
+  bool updated = false;
+  Serial.println("Received POST /save with arguments:");
+  for (uint8_t i = 0; i < server.args(); i++) {
+    Serial.printf("Arg %s: %s\n", server.argName(i).c_str(), server.arg(i).c_str());
+  }
+  if (server.hasArg("device") && server.arg("device").length() > 0) {
+    strlcpy(config.device, server.arg("device").c_str(), sizeof(config.device));
+    updated = true;
+  }
+  if (server.hasArg("influxHost") && server.arg("influxHost").length() > 0) {
+    strlcpy(config.influxHost, server.arg("influxHost").c_str(), sizeof(config.influxHost));
+    updated = true;
+  }
+  if (server.hasArg("influxPort") && server.arg("influxPort").length() > 0) {
+    config.influxPort = server.arg("influxPort").toInt();
+    updated = true;
+  }
+  if (server.hasArg("influxBucket") && server.arg("influxBucket").length() > 0) {
+    strlcpy(config.influxBucket, server.arg("influxBucket").c_str(), sizeof(config.influxBucket));
+    updated = true;
+  }
+  if (server.hasArg("influxOrg") && server.arg("influxOrg").length() > 0) {
+    strlcpy(config.influxOrg, server.arg("influxOrg").c_str(), sizeof(config.influxOrg));
+    updated = true;
+  }
+  if (server.hasArg("influxToken") && server.arg("influxToken").length() > 0) {
+    strlcpy(config.influxToken, server.arg("influxToken").c_str(), sizeof(config.influxToken));
+    updated = true;
+  }
+  if (server.hasArg("debounceDelay") && server.arg("debounceDelay").length() > 0) {
+    config.debounceDelay = server.arg("debounceDelay").toInt();
+    updated = true;
+  }
+  if (updated) {
+    configManager.set(config); // Update the internal config
+    if (configManager.save()) { // Call save without passing config
+      Serial.println("Configuration saved successfully");
+      server.send(200, "text/plain", "Settings saved");
+    } else {
+      Serial.println("Failed to save configuration");
+      server.send(500, "text/plain", "Failed to save settings");
+    }
+  } else {
+    Serial.println("No valid settings provided to save");
+    server.send(400, "text/plain", "No valid settings provided");
+  }
+}
+
+void WebServerManager::handleRelayToggle() {
+  controlManager.setRelayState(false, true);
+  server.send(200, "text/plain", "Relay toggled");
+}
+
+void WebServerManager::handleBuzzerError() {
+  controlManager.playErrorSound();
+  server.send(200, "text/plain", "Error sound played");
+}
+
+void WebServerManager::handleBuzzerWarning() {
+  controlManager.playWarningSound();
+  server.send(200, "text/plain", "Warning sound played");
+}
+
+void WebServerManager::handleBuzzerSuccess() {
+  controlManager.playSuccessSound();
+  server.send(200, "text/plain", "Success sound played");
+}
+
+void WebServerManager::handleWriteTag() {
+  if (server.hasArg("tagText") && server.arg("tagText").length() > 0) {
+    nfcManager.setPendingWrite(server.arg("tagText").c_str());
+    lastTagData = "Waiting for NFC tag...";
+  } else {
+    lastTagData = "No data provided to write";
+    controlManager.playErrorSound();
+  }
+  server.send(200, "text/plain", lastTagData);
+}
+
+void WebServerManager::handleStatus() {
   DeviceStatus status = controlManager.getStatus();
-  ESPUI.updateLabel(relayLabelId, status.relayOn ? "On" : "Off");
-  ESPUI.updateLabel(buzzerLabelId, status.buzzerOn ? "On" : "Off");
-  ESPUI.updateLabel(buttonLabelId, status.buttonPressed ? "Pressed" : "Released");
-  ESPUI.updateLabel(tagDataLabelId, nfcManager.getLastTagData());
+  String json = "{";
+  json += "\"relayStatus\":\"" + String(status.relayOn ? "On" : "Off") + "\",";
+  json += "\"buzzerStatus\":\"" + String(status.buzzerOn ? "On" : "Off") + "\",";
+  json += "\"buttonStatus\":\"" + String(status.buttonPressed ? "Pressed" : "Released") + "\",";
+  json += "\"tagData\":\"" + String(nfcManager.getLastTagData()) + "\"";
+  json += "}";
+  lastTagData = nfcManager.getLastTagData();
+  server.send(200, "application/json", json);
 }
 
-void WebServerManager::setupUI() {
-  Config cfg = configManager.get();
-  
-  ESPUI.setVerbosity(Verbosity::Quiet);
-  ESPUI.begin("ESP8266 Configuration");
+void WebServerManager::handleFileStatus() {
+  String json = "{";
+  json += "\"fileExists\":" + String(SPIFFS.exists("/index.html") ? "true" : "false");
+  json += "}";
+  server.send(200, "application/json", json);
+}
 
-  uint16_t tab1 = ESPUI.addControl(ControlType::Tab, "Settings", "Settings");
-  uint16_t tab2 = ESPUI.addControl(ControlType::Tab, "Controls", "Controls");
-  uint16_t tab3 = ESPUI.addControl(ControlType::Tab, "NFC Tag", "NFC Tag");
-  uint16_t tab4 = ESPUI.addControl(ControlType::Tab, "Press Counter", "Press Counter");
+void WebServerManager::handleUpdate() {
+  String page = "<html><head><title>ESP OTA Update</title>";
+  page += "<style>body{font-family:Arial,sans-serif;padding:20px}.control{margin:10px 0}input,button{padding:8px;margin:5px}</style>";
+  page += "<body><h2>ESP OTA Update</h2>";
+  page += "<form method='POST' action='/update' enctype='multipart/form-data'>";
+  page += "<div class='control'><input type='file' name='update'></div>";
+  page += "<div class='control'><input type='submit' value='Update'></div></form></body></html>";
+  server.send(200, "text/html", page);
+}
 
-  // Settings Tab
-  ESPUI.addControl(ControlType::Label, "Device Settings", "Device Settings", ControlColor::Turquoise, tab1);
-  
-  deviceData = {&configManager, 1};
-  deviceNameId = ESPUI.addControl(ControlType::Text, "Device Name", cfg.device, ControlColor::Turquoise, tab1, &WebServerManager::onSaveSettings, &deviceData);
-  
-  influxHostData = {&configManager, 2};
-  influxHostId = ESPUI.addControl(ControlType::Text, "InfluxDB Host", cfg.influxHost, ControlColor::Turquoise, tab1, &WebServerManager::onSaveSettings, &influxHostData);
-  
-  influxPortData = {&configManager, 3};
-  influxPortId = ESPUI.addControl(ControlType::Number, "InfluxDB Port", String(cfg.influxPort), ControlColor::Turquoise, tab1, &WebServerManager::onSaveSettings, &influxPortData);
-  
-  influxBucketData = {&configManager, 4};
-  influxBucketId = ESPUI.addControl(ControlType::Text, "InfluxDB Bucket", cfg.influxBucket, ControlColor::Turquoise, tab1, &WebServerManager::onSaveSettings, &influxBucketData);
-  
-  influxOrgData = {&configManager, 5};
-  influxOrgId = ESPUI.addControl(ControlType::Text, "InfluxDB Organization", cfg.influxOrg, ControlColor::Turquoise, tab1, &WebServerManager::onSaveSettings, &influxOrgData);
-  
-  influxTokenData = {&configManager, 6};
-  influxTokenId = ESPUI.addControl(ControlType::Text, "InfluxDB Token", cfg.influxToken, ControlColor::Turquoise, tab1, &WebServerManager::onSaveSettings, &influxTokenData);
-  
-  ntpData = {&configManager, 7};
-  ntpId = ESPUI.addControl(ControlType::Text, "NTP Server", cfg.ntp, ControlColor::Turquoise, tab1, &WebServerManager::onSaveSettings, &ntpData);
-  
-  debounceDelayData = {&configManager, 8};
-  debounceDelayId = ESPUI.addControl(ControlType::Number, "Debounce Delay", String(cfg.debounceDelay), ControlColor::Turquoise, tab1, &WebServerManager::onSaveSettings, &debounceDelayData);
-  
-  firmwareUrlData = {&configManager, 9};
-  firmwareUrlId = ESPUI.addControl(ControlType::Text, "Firmware URL", cfg.firmwareUrl, ControlColor::Turquoise, tab1, &WebServerManager::onSaveSettings, &firmwareUrlData);
-
-  // Firmware Upload
-  ESPUI.addControl(ControlType::Label, "Firmware Upload", "Firmware Upload", ControlColor::Turquoise, tab1);
-  firmwareUploadButtonId = ESPUI.addControl(ControlType::Button, "Upload Firmware", "Go to Upload Form", ControlColor::Emerald, tab1, &WebServerManager::onFirmwareUploadButton, this);
-  firmwareUploadStatusId = ESPUI.addControl(ControlType::Label, "Firmware Upload Status", "No file uploaded", ControlColor::Alizarin, tab1);
-
-  // Controls Tab
-  ESPUI.addControl(ControlType::Label, "Device Controls", "Device Controls", ControlColor::Emerald, tab2);
-  ESPUI.addControl(ControlType::Switcher, "Relay Toggle", "0", ControlColor::Emerald, tab2, &WebServerManager::onRelayToggle, &controlManager);
-  ESPUI.addControl(ControlType::Button, "Error Sound", "Play", ControlColor::Emerald, tab2, &WebServerManager::onBuzzerError, &controlManager);
-  ESPUI.addControl(ControlType::Button, "Warning Sound", "Play", ControlColor::Emerald, tab2, &WebServerManager::onBuzzerWarning, &controlManager);
-  ESPUI.addControl(ControlType::Button, "Success Sound", "Play", ControlColor::Emerald, tab2, &WebServerManager::onBuzzerSuccess, &controlManager);
-  
-  ESPUI.addControl(ControlType::Label, "Device Status", "Device Status", ControlColor::Alizarin, tab2);
-  relayLabelId = ESPUI.addControl(ControlType::Label, "Relay Status", "Off", ControlColor::Alizarin, tab2);
-  buzzerLabelId = ESPUI.addControl(ControlType::Label, "Buzzer Status", "Off", ControlColor::Alizarin, tab2);
-  buttonLabelId = ESPUI.addControl(ControlType::Label, "Button Status", "Released", ControlColor::Alizarin, tab2);
-
-  // NFC Tag Tab
-  ESPUI.addControl(ControlType::Label, "NFC Operations", "NFC Operations", ControlColor::Turquoise, tab3);
-  uint16_t tagInputId = ESPUI.addControl(ControlType::Text, "Tag Text", "example text", ControlColor::Turquoise, tab3); // Changed label to "Tag Text"
-  ESPUI.addControl(ControlType::Button, "Write Tag", "Write", ControlColor::Emerald, tab3, &WebServerManager::onWriteTag, this);
-  tagDataLabelId = ESPUI.addControl(ControlType::Label, "Last Tag Data", "No tag read", ControlColor::Alizarin, tab3);
-
-  // Press Counter Tab
-  ESPUI.addControl(ControlType::Label, "Press Counter", "Press Counter", ControlColor::Peterriver, tab4);
-  
-  updateStatus();
+void WebServerManager::handleUploadFirmware() {
+  // Handled in setupRoutes()
 }
 
 void WebServerManager::begin() {
-  setupUI();
-  server.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request) {
-    request->send(200);
-  }, [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
-    this->handleFileUpload(request, filename, index, data, len, final);
+  if (!SPIFFS.begin()) {
+    Serial.println("Failed to mount SPIFFS");
+    return;
+  }
+  server.onNotFound([this]() {
+    server.send(404, "text/plain", "Not found");
   });
-  server.on("/upload-form", HTTP_GET, [](AsyncWebServerRequest *request) {
-    String html = "<html><body><h2>Upload Firmware</h2>";
-    html += "<form method='POST' action='/upload' enctype='multipart/form-data'>";
-    html += "<input type='file' name='firmware' accept='.bin'>";
-    html += "<input type='submit' value='Upload Firmware'>";
-    html += "</form>";
-    html += "<p>Return to <a href='/'>ESPUI Interface</a></p>";
-    html += "</body></html>";
-    request->send(200, "text/html", html);
-  });
+  setupRoutes();
   server.begin();
   Serial.println("Web server started");
+}
+
+void WebServerManager::handleClient() {
+  server.handleClient();
+}
+
+void WebServerManager::updateStatus() {
+  lastTagData = nfcManager.getLastTagData();
 }

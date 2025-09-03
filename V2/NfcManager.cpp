@@ -1,6 +1,9 @@
 #include "NfcManager.h"
 
-NfcManager::NfcManager() : mfrc522(CS_PIN, RST_PIN), nfc(&mfrc522), lastTagData(""), pendingTagData(""), pendingTagWrite(false) {}
+NfcManager::NfcManager() : mfrc522(CS_PIN, RST_PIN), nfc(&mfrc522), pendingTagWrite(false) {
+  lastTagData[0] = '\0';
+  pendingTagData[0] = '\0';
+}
 
 void NfcManager::begin() {
   SPI.begin();
@@ -8,16 +11,18 @@ void NfcManager::begin() {
   nfc.begin();
 }
 
-String NfcManager::readTag() {
+const char* NfcManager::readTag() {
   if (nfc.tagPresent()) {
     NfcTag tag = nfc.read();
-    lastTagData = tag.getUidString();
+    String uid = tag.getUidString();
+    strlcpy(lastTagData, uid.c_str(), MAX_TAG_DATA_LENGTH);
     
     Serial.println("NFC Tag Read:");
     Serial.print("UID: ");
     Serial.println(lastTagData);
     Serial.print("Tag Type: ");
     Serial.println(tag.getTagType());
+    
     if (tag.hasNdefMessage()) {
       NdefMessage message = tag.getNdefMessage();
       int recordCount = message.getRecordCount();
@@ -30,11 +35,11 @@ String NfcManager::readTag() {
             byte status = payload[0];
             int languageCodeLength = status & 0x3F;
             if (payloadLength > 1 + languageCodeLength) {
-              String text = "";
+              char text[64] = {0};
               for (int j = 1 + languageCodeLength; j < payloadLength; j++) {
-                text += (char)payload[j];
+                text[j - 1 - languageCodeLength] = (char)payload[j];
               }
-              lastTagData += text;
+              strlcat(lastTagData, text, MAX_TAG_DATA_LENGTH);
             }
           }
         }
@@ -44,25 +49,25 @@ String NfcManager::readTag() {
   return lastTagData;
 }
 
-bool NfcManager::writeTag(const String& text) {
+bool NfcManager::writeTag(const char* text) {
   if (nfc.tagPresent()) {
     NdefMessage message = NdefMessage();
-    message.addTextRecord(text.c_str());
+    message.addTextRecord(text);
     bool success = nfc.write(message);
     if (success) {
-      lastTagData = text;
+      strlcpy(lastTagData, text, MAX_TAG_DATA_LENGTH);
     }
     return success;
   }
   return false;
 }
 
-String NfcManager::getLastTagData() const {
+const char* NfcManager::getLastTagData() const {
   return lastTagData;
 }
 
-void NfcManager::setPendingWrite(const String& text) {
-  pendingTagData = text;
+void NfcManager::setPendingWrite(const char* text) {
+  strlcpy(pendingTagData, text, MAX_TAG_DATA_LENGTH);
   pendingTagWrite = true;
 }
 
@@ -70,11 +75,11 @@ bool NfcManager::handleNfcLoop() {
   if (pendingTagWrite && nfc.tagPresent()) {
     if (writeTag(pendingTagData)) {
       pendingTagWrite = false;
-      pendingTagData = "";
+      pendingTagData[0] = '\0';
       return true;
     } else {
       pendingTagWrite = false;
-      pendingTagData = "";
+      pendingTagData[0] = '\0';
       return false;
     }
   } else {

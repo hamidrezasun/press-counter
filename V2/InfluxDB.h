@@ -8,7 +8,7 @@ class InfluxDB {
 public:
   InfluxDB(ConfigManager& cfg);
   void begin();
-  void sendData(const String& measurement, const String& fields);
+  void sendData(const char* measurement, const char* fields);
   void sendDeviceInfo();
   bool getLastWriteFailed() const;
 

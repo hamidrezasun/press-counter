@@ -15,7 +15,8 @@ void PressCounter::handle() {
   if ((millis() - lastDebounceTime) > 50) { // 50ms debounce
     if (reading != lastState && !reading) { // Falling edge
       count++;
-      String fields = "count=" + String(count);
+      char fields[32];
+      snprintf(fields, sizeof(fields), "count=%lu", count);
       influxDB.sendData("press_counter", fields);
     }
     lastState = reading;

@@ -1,18 +1,15 @@
 #include <Arduino.h>
 #include "ConfigManager.h"
-#include "WiFiManagerSetup.h"
 #include "WebServerManager.h"
 #include "InfluxDB.h"
 #include "ControlManager.h"
 #include "NfcManager.h"
 #include "PressCounter.h"
 
-AsyncWebServer server(80);
-DNSServer dns;
+ESP8266WebServer server(80);
 WiFiClient wifiClient;
 
 ConfigManager configManager;
-WiFiManagerSetup wifiSetup(server, dns);
 ControlManager controlManager(configManager);
 NfcManager nfcManager;
 WebServerManager webManager(server, configManager, controlManager, nfcManager);
@@ -21,18 +18,31 @@ PressCounter pressCounter(PRESS_SENSOR_PIN,influxDB);
 
 void setup() {
   Serial.begin(74880);
+  Serial.println("---startup begin---");
   delay(1000);
-
   controlManager.begin();
   controlManager.playStartupTone();
 
   pressCounter.begin();
-  configManager.load();      
-  wifiSetup.begin();
+  configManager.load();
   nfcManager.begin();
   webManager.begin();
   influxDB.begin();
+  Serial.print("Connecting to ");
+  Serial.println(SSID);
 
+  WiFi.begin(SSID, PASSWORD);
+
+  // Wait until connected
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("");
+  Serial.println("WiFi connected!");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());  // Print assigned IP
   if (WiFi.status() == WL_CONNECTED) {
     influxDB.sendDeviceInfo();
   } else {
@@ -41,6 +51,7 @@ void setup() {
 }
 
 void loop() {
+  webManager.handleClient();
   controlManager.handleButton();
   controlManager.buzzerLoop();
   pressCounter.handle();
@@ -50,7 +61,7 @@ void loop() {
     // Write successful
     webManager.updateStatus(); // Update UI to reflect written data
     controlManager.playSuccessSound();
-  } else if (!nfcManager.getLastTagData().isEmpty()) {
+  } else if (strlen(nfcManager.getLastTagData()) > 0) {
     // Tag read, update UI
     webManager.updateStatus();
   }
@@ -60,6 +71,4 @@ void loop() {
     webManager.updateStatus();
     lastUpdate = millis();
   }
-  
-  delay(10);
 }

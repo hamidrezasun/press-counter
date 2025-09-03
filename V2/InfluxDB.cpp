@@ -5,18 +5,23 @@ InfluxDB::InfluxDB(ConfigManager& cfg) : configManager(cfg), lastWriteFailed(fal
 
 void InfluxDB::begin() {}
 
-void InfluxDB::sendData(const String& measurement, const String& fields) {
+void InfluxDB::sendData(const char* measurement, const char* fields) {
   Config cfg = configManager.get();
-  if (cfg.influxHost.isEmpty() || cfg.influxBucket.isEmpty() || cfg.influxOrg.isEmpty() || cfg.influxToken.isEmpty()) {
+  if (strlen(cfg.influxHost) == 0 || strlen(cfg.influxBucket) == 0 || 
+      strlen(cfg.influxOrg) == 0 || strlen(cfg.influxToken) == 0) {
     Serial.println("InfluxDB not configured");
     lastWriteFailed = true;
     return;
   }
 
-  String url = "http://" + cfg.influxHost + ":" + String(cfg.influxPort) + "/api/v2/write?org=" + cfg.influxOrg + "&bucket=" + cfg.influxBucket + "&precision=s";
+  char url[256];
+  snprintf(url, sizeof(url), "http://%s:%d/api/v2/write?org=%s&bucket=%s&precision=s",
+           cfg.influxHost, cfg.influxPort, cfg.influxOrg, cfg.influxBucket);
 
-  String data = measurement + ",device=" + cfg.device + " " + fields;
-  Serial.println("Sending to InfluxDB: " + data);
+  char data[512];
+  snprintf(data, sizeof(data), "%s,device=%s %s", measurement, cfg.device, fields);
+  Serial.print("Sending to InfluxDB: ");
+  Serial.println(data);
 
   http.onReadyStateChange([](void* arg, asyncHTTPrequest* request, int readyState) {
     InfluxDB* influx = static_cast<InfluxDB*>(arg);
@@ -25,17 +30,21 @@ void InfluxDB::sendData(const String& measurement, const String& fields) {
         Serial.println("InfluxDB data sent successfully");
         influx->lastWriteFailed = false;
       } else {
-        Serial.println("InfluxDB send failed: HTTP " + String(request->responseHTTPcode()));
-        Serial.println("Response: " + request->responseText());
+        Serial.print("InfluxDB send failed: HTTP ");
+        Serial.println(request->responseHTTPcode());
+        Serial.print("Response: ");
+        Serial.println(request->responseText());
         influx->lastWriteFailed = true;
       }
     }
   }, this);
 
   if (http.readyState() == 0 || http.readyState() == 4) {
-    if (http.open("POST", url.c_str())) {
+    if (http.open("POST", url)) {
       http.setReqHeader("Content-Type", "text/plain");
-      http.setReqHeader("Authorization", ("Token " + cfg.influxToken).c_str());
+      char authHeader[128];
+      snprintf(authHeader, sizeof(authHeader), "Token %s", cfg.influxToken);
+      http.setReqHeader("Authorization", authHeader);
       http.setTimeout(5);
       http.send(data);
     } else {
@@ -43,15 +52,16 @@ void InfluxDB::sendData(const String& measurement, const String& fields) {
       lastWriteFailed = true;
     }
   } else {
-    Serial.println("HTTP request not ready, state: " + String(http.readyState()));
+    Serial.print("HTTP request not ready, state: ");
+    Serial.println(http.readyState());
     lastWriteFailed = true;
   }
 }
 
 void InfluxDB::sendDeviceInfo() {
-  String fields = "ip=\"" + WiFi.localIP().toString() + "\"";
-  fields += ",rssi=" + String(WiFi.RSSI());
-  fields += ",mac=\"" + WiFi.macAddress() + "\"";
+  char fields[256];
+  snprintf(fields, sizeof(fields), "ip=\"%s\",rssi=%d,mac=\"%s\"",
+           WiFi.localIP().toString().c_str(), WiFi.RSSI(), WiFi.macAddress().c_str());
   
   sendData("device_info", fields);
 }
