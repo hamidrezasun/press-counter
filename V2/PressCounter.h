@@ -3,10 +3,12 @@
 
 #include <Arduino.h>
 #include "InfluxDB.h"
+#include "ConfigManager.h"
+#include "ControlManager.h"
 
 class PressCounter {
 public:
-  PressCounter(uint8_t pin, InfluxDB& influx);
+  PressCounter(uint8_t pin, InfluxDB& influx, ConfigManager& cfg, ControlManager& ctrl);
   void begin();
   void handle();
   void reset();
@@ -15,11 +17,13 @@ public:
   unsigned long getLastPulseTime() const;
   bool getInPulseTrain() const;
   unsigned long getPulseTrainStart() const;
-  void setMinPulseDuration(unsigned long minDuration);
+  void updateMinPulseDuration();
 
 private:
   uint8_t counterPin;
   InfluxDB& influxDB;
+  ConfigManager& configManager;
+  ControlManager& controlManager;
   volatile unsigned long pulseStart;
   volatile unsigned long lastPulseDuration;
   volatile unsigned long lastPulseTime;

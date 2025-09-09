@@ -19,7 +19,7 @@ void ControlManager::handleButton() {
   if (reading != lastButtonReading) {
     lastDebounceTime = millis();
   }
-  if ((millis() - lastDebounceTime) > configManager.get().debounceDelay) {
+  if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY) {
     if (reading != buttonState) {
       buttonState = reading;
       Serial.println("Button state changed to: " + String(buttonState ? "Pressed" : "Released"));
@@ -32,14 +32,21 @@ DeviceStatus ControlManager::getStatus() {
   return {relayState, buzzerState, buttonState};
 }
 
-void ControlManager::setRelayState(bool state, bool toggle) {
-  if (toggle) {
-    relayState = !relayState;
-  } else {
-    relayState = state;
-  }
-  digitalWrite(RELAY_PIN, relayState ? HIGH : LOW);
-  Serial.println("Relay state set to: " + String(relayState ? "On" : "Off"));
+void ControlManager::setRelayState(bool state, bool toggle, InfluxDB* influxDB) {
+    if (toggle) {
+        relayState = !relayState;
+    } else {
+        relayState = state;
+    }
+    digitalWrite(RELAY_PIN, relayState ? HIGH : LOW);
+    Serial.println("Relay state set to: " + String(relayState ? "On" : "Off"));
+    
+    // Send to InfluxDB if provided
+    if (influxDB != nullptr) {
+        char fields[32];
+        snprintf(fields, sizeof(fields), "state=%s", relayState ? "true" : "false");
+        influxDB->sendData("relay", fields);
+    }
 }
 
 void ControlManager::startBuzzer(BuzzerMode mode) {
@@ -152,7 +159,7 @@ void ControlManager::buzzerLoop() {
   } else if (buzzerMode == STARTUP) {
     if (buzzerStep < 4) { // 4 steps: 2 beeps (on-off-on-off)
       if (buzzerStep % 2 == 0) { // Beep on
-        if (currentTime - lastBuzzerToggle >= 100) { // 100ms beep
+        if (currentTime - lastBuzzerToggle >= 150) { // 100ms beep
           buzzerState = false;
           digitalWrite(BUZZER_PIN, LOW);
           lastBuzzerToggle = currentTime;
@@ -160,7 +167,7 @@ void ControlManager::buzzerLoop() {
           Serial.println("STARTUP: Beep off, step " + String(buzzerStep));
         }
       } else { // Pause
-        if (currentTime - lastBuzzerToggle >= 100) { // 100ms pause
+        if (currentTime - lastBuzzerToggle >= 150) { // 100ms pause
           buzzerState = true;
           digitalWrite(BUZZER_PIN, HIGH);
           lastBuzzerToggle = currentTime;

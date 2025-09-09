@@ -15,7 +15,7 @@ void InfluxDB::sendData(const char* measurement, const char* fields) {
   }
 
   char url[256];
-  snprintf(url, sizeof(url), "http://%s:%d/api/v2/write?org=%s&bucket=%s&precision=s",
+  snprintf(url, sizeof(url), "http://%s:%d/api/v2/write?org=%s&bucket=%s&precision=ms",
            cfg.influxHost, cfg.influxPort, cfg.influxOrg, cfg.influxBucket);
 
   char data[512];

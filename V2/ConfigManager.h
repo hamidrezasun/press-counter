@@ -5,7 +5,6 @@
 #include <ArduinoJson.h>
 #include <FS.h>
 
-
 struct Config {
   char device[10];
   char influxHost[20];
@@ -13,7 +12,7 @@ struct Config {
   char influxBucket[20];
   char influxOrg[20];
   char influxToken[90];
-  int debounceDelay;
+  int minPulseDuration;
 };
 
 class ConfigManager {

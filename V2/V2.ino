@@ -13,25 +13,32 @@ ConfigManager configManager;
 ControlManager controlManager(configManager);
 NfcManager nfcManager;
 InfluxDB influxDB(configManager);
-PressCounter pressCounter(PRESS_SENSOR_PIN, influxDB);
-WebServerManager webManager(server, configManager, controlManager, nfcManager, pressCounter); // Pass pressCounter
+PressCounter pressCounter(PRESS_SENSOR_PIN, influxDB, configManager, controlManager);
+WebServerManager webManager(server, configManager, controlManager, nfcManager, pressCounter);
+
+unsigned long lastPressTime = 0;
+const unsigned long PRESS_TIMEOUT = 10 * 60 * 1000; // 10 minutes in milliseconds
+
+const unsigned long nfcINTERVAL = 2000;
+unsigned long nfcPreviousMillis = 0;
 
 void setup() {
   Serial.begin(74880);
   Serial.println("---startup begin---");
   delay(1000);
   controlManager.begin();
-  controlManager.playStartupTone();
-
-  pressCounter.begin();
+  //controlManager.playStartupTone();
   configManager.load();
-  nfcManager.begin();
+  pressCounter.begin();
+  if(!nfcManager.begin()){
+    controlManager.playErrorSound();
+  }
   webManager.begin();
   influxDB.begin();
   Serial.print("Connecting to ");
-  Serial.println(SSID);
+  Serial.println(WIFI_SSID);
 
-  WiFi.begin(SSID, PASSWORD);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD );
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -44,28 +51,28 @@ void setup() {
   Serial.println(WiFi.localIP());
   if (WiFi.status() == WL_CONNECTED) {
     influxDB.sendDeviceInfo();
+    controlManager.playSuccessSound();
   } else {
     controlManager.playErrorSound();
   }
-  controlManager.playSuccessSound();
 }
 
 void loop() {
-  webManager.handleClient();
-  controlManager.handleButton();
-  controlManager.buzzerLoop();
-  pressCounter.handle();
-  
-  if (nfcManager.handleNfcLoop()) {
-    webManager.updateStatus();
-    controlManager.playSuccessSound();
-  } else if (strlen(nfcManager.getLastTagData()) > 0) {
-    webManager.updateStatus();
-  }
-  
-  static unsigned long lastUpdate = 0;
-  if (millis() - lastUpdate >= 1000) {
-    webManager.updateStatus();
-    lastUpdate = millis();
-  }
+    webManager.handleClient();
+    controlManager.handleButton();
+    controlManager.buzzerLoop();
+    pressCounter.handle();
+    
+    // Check if press counter has been idle for 10 minutes
+    if (pressCounter.getLastPulseTime() > 0 && 
+        millis() - pressCounter.getLastPulseTime() > PRESS_TIMEOUT &&
+        controlManager.getStatus().relayOn) {
+        controlManager.setRelayState(false, false, &influxDB);
+        Serial.println("Turned off relay due to 10-minute inactivity");
+    }
+    unsigned long nfcCurrentMillis = millis();
+    if (nfcCurrentMillis - nfcPreviousMillis >= nfcINTERVAL) {
+      nfcPreviousMillis = nfcCurrentMillis;
+      nfcManager.handleNfcLoop(webManager, controlManager, influxDB);
+    }
 }

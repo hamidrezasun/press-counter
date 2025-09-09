@@ -33,7 +33,7 @@ bool ConfigManager::load() {
   strlcpy(config.influxBucket, doc["influxBucket"] | "", 20);
   strlcpy(config.influxOrg, doc["influxOrg"] | "", 20);
   strlcpy(config.influxToken, doc["influxToken"] | "", 90);
-  config.debounceDelay = doc["debounceDelay"] | 0;
+  config.minPulseDuration = doc["minPulseDuration"] | 10;
   
   return true;
 }
@@ -46,7 +46,7 @@ bool ConfigManager::save() {
   doc["influxBucket"] = config.influxBucket;
   doc["influxOrg"] = config.influxOrg;
   doc["influxToken"] = config.influxToken;
-  doc["debounceDelay"] = config.debounceDelay;
+  doc["minPulseDuration"] = config.minPulseDuration;
   
   File file = SPIFFS.open(_filename, "w");
   if (!file) {
@@ -66,7 +66,7 @@ void ConfigManager::setDefaults() {
   strlcpy(config.influxBucket, "", 20);
   strlcpy(config.influxOrg, "", 20);
   strlcpy(config.influxToken, "", 90);
-  config.debounceDelay = 0;
+  config.minPulseDuration = 10;
 }
 
 Config& ConfigManager::get() { return config; }

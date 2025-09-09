@@ -3,356 +3,667 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hydraulic Press Configuration</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>ESP8266 Control Panel</title>
     <style>
-        .tab { display: none; }
-        .tab.active { display: block; }
-        .toast {
-            position: fixed;
-            bottom: 1rem;
-            right: 1rem;
-            padding: 1rem;
-            border-radius: 0.5rem;
-            color: white;
-            opacity: 0;
-            transition: opacity 0.3s ease-in-out;
+        :root {
+            --primary: #2c3e50;
+            --secondary: #3498db;
+            --success: #2ecc71;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --light: #ecf0f1;
+            --dark: #34495e;
         }
-        .toast.show { opacity: 1; }
-        .toast.success { background-color: #10b981; }
-        .toast.error { background-color: #ef4444; }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        h1 {
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+        
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: var(--light);
+            border-radius: 6px;
+        }
+        
+        .status-item {
+            margin: 5px 10px;
+            text-align: center;
+        }
+        
+        .status-label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .status-value {
+            padding: 5px 10px;
+            border-radius: 4px;
+            background: white;
+            min-width: 100px;
+            display: inline-block;
+        }
+        
+        .status-on {
+            color: var(--success);
+            font-weight: bold;
+        }
+        
+        .status-off {
+            color: var(--danger);
+        }
+        
+        .card {
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            padding: 20px;
+        }
+        
+        .card-header {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: var(--primary);
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        
+        input[type="text"],
+        input[type="number"],
+        input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s;
+        }
+        
+        .btn-primary {
+            background-color: var(--secondary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #2980b9;
+        }
+        
+        .btn-success {
+            background-color: var(--success);
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background-color: #27ae60;
+        }
+        
+        .btn-warning {
+            background-color: var(--warning);
+            color: white;
+        }
+        
+        .btn-warning:hover {
+            background-color: #e67e22;
+        }
+        
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background-color: #c0392b;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .action-buttons button {
+            flex: 1;
+            min-width: 120px;
+        }
+        
+        .tab-container {
+            margin-top: 20px;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            background: #f8f9fa;
+            margin-right: 5px;
+        }
+        
+        .tab.active {
+            background: white;
+            border-color: #ddd;
+            border-bottom-color: white;
+            margin-bottom: -1px;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .notification {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            display: none;
+        }
+        
+        .notification.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .notification.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .pulse-counter {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+        
+        .counter-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--secondary);
+        }
+        
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .status-bar {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .status-item {
+                margin: 10px 0;
+            }
+        }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center">
-    <div class="container mx-auto p-4 max-w-4xl">
-        <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Hydraulic Press Configuration</h1>
-
-        <!-- Tab Buttons -->
-        <div class="flex flex-wrap justify-center gap-2 mb-6">
-            <button onclick="showTab('settings')" class="tab-button bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition">Settings</button>
-            <button onclick="showTab('controls')" class="tab-button bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition">Controls</button>
-            <button onclick="showTab('nfc')" class="tab-button bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition">NFC Tag</button>
-            <button onclick="showTab('pressCounter')" class="tab-button bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition">Press Counter</button>
-            <button onclick="showTab('upload')" class="tab-button bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition">Upload Interface</button>
-        </div>
-
-        <!-- Settings Tab -->
-        <div id="settings" class="tab bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-2xl font-semibold text-gray-700 mb-4">Device Settings</h2>
-            <form id="settingsForm" class="space-y-4">
-                <div>
-                    <label for="device" class="block text-sm font-medium text-gray-700">Device Name</label>
-                    <input type="text" id="device" name="device" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200" placeholder="Enter device name">
-                </div>
-                <div>
-                    <label for="influxHost" class="block text-sm font-medium text-gray-700">InfluxDB Host</label>
-                    <input type="text" id="influxHost" name="influxHost" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200" placeholder="Enter InfluxDB host">
-                </div>
-                <div>
-                    <label for="influxPort" class="block text-sm font-medium text-gray-700">InfluxDB Port</label>
-                    <input type="number" id="influxPort" name="influxPort" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200" placeholder="Enter port number">
-                </div>
-                <div>
-                    <label for="influxBucket" class="block text-sm font-medium text-gray-700">InfluxDB Bucket</label>
-                    <input type="text" id="influxBucket" name="influxBucket" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200" placeholder="Enter bucket name">
-                </div>
-                <div>
-                    <label for="influxOrg" class="block text-sm font-medium text-gray-700">InfluxDB Organization</label>
-                    <input type="text" id="influxOrg" name="influxOrg" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200" placeholder="Enter organization">
-                </div>
-                <div>
-                    <label for="influxToken" class="block text-sm font-medium text-gray-700">InfluxDB Token</label>
-                    <input type="text" id="influxToken" name="influxToken" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200" placeholder="Enter token">
-                </div>
-                <div>
-                    <label for="debounceDelay" class="block text-sm font-medium text-gray-700">Debounce Delay (ms)</label>
-                    <input type="number" id="debounceDelay" name="debounceDelay" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200" placeholder="Enter debounce delay">
-                </div>
-                <div>
-                    <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition flex items-center">
-                        <span id="settingsLoading" class="hidden mr-2">⏳</span> Save Settings
-                    </button>
-                </div>
-            </form>
-            <p class="mt-4 text-sm text-gray-600">Visit <a href="/update" class="text-blue-500 hover:underline">/update</a> to upload firmware</p>
-        </div>
-
-        <!-- Controls Tab -->
-        <div id="controls" class="tab bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-2xl font-semibold text-gray-700 mb-4">Device Controls</h2>
-            <div class="flex flex-wrap gap-2 mb-4">
-                <button onclick="toggleRelay()" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition flex items-center">
-                    <span id="relayLoading" class="hidden mr-2">⏳</span> Toggle Relay
-                </button>
-                <button onclick="playErrorSound()" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition flex items-center">
-                    <span id="errorSoundLoading" class="hidden mr-2">⏳</span> Play Error Sound
-                </button>
-                <button onclick="playWarningSound()" class="bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition flex items-center">
-                    <span id="warningSoundLoading" class="hidden mr-2">⏳</span> Play Warning Sound
-                </button>
-                <button onclick="playSuccessSound()" class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition flex items-center">
-                    <span id="successSoundLoading" class="hidden mr-2">⏳</span> Play Success Sound
-                </button>
+<body>
+    <div class="container">
+        <header>
+            <h1>ESP8266 Control Panel</h1>
+            <p>Manage your device settings and controls</p>
+        </header>
+        
+        <div id="notification" class="notification"></div>
+        
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-label">Relay Status:</span>
+                <span class="status-value" id="relay-status">Loading...</span>
             </div>
-            <h3 class="text-xl font-semibold text-gray-700 mb-2">Device Status</h3>
-            <div class="space-y-2">
-                <p>Relay Status: <span id="relayStatus" class="font-medium">Loading...</span></p>
-                <p>Buzzer Status: <span id="buzzerStatus" class="font-medium">Loading...</span></p>
-                <p>Button Status: <span id="buttonStatus" class="font-medium">Loading...</span></p>
+            <div class="status-item">
+                <span class="status-label">Buzzer Status:</span>
+                <span class="status-value" id="buzzer-status">Loading...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Button Status:</span>
+                <span class="status-value" id="button-status">Loading...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">NFC Tag:</span>
+                <span class="status-value" id="tag-data">Loading...</span>
             </div>
         </div>
-
-        <!-- NFC Tab -->
-        <div id="nfc" class="tab bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-2xl font-semibold text-gray-700 mb-4">NFC Operations</h2>
-            <form id="nfcForm" class="space-y-4">
-                <div>
-                    <label for="tagText" class="block text-sm font-medium text-gray-700">Tag Text</label>
-                    <input type="text" id="tagText" name="tagText" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200" placeholder="Enter text to write to tag">
-                </div>
-                <div>
-                    <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition flex items-center">
-                        <span id="nfcLoading" class="hidden mr-2">⏳</span> Write Tag
-                    </button>
-                </div>
-            </form>
-            <p class="mt-4">Last Tag Data: <span id="tagData" class="font-medium">No tag read</span></p>
+        
+        <div class="tabs">
+            <div class="tab active" data-tab="controls">Controls</div>
+            <div class="tab" data-tab="settings">Settings</div>
+            <div class="tab" data-tab="nfc">NFC</div>
+            <div class="tab" data-tab="firmware">Firmware</div>
         </div>
-
-        <!-- Press Counter Tab -->
-        <div id="pressCounter" class="tab bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-2xl font-semibold text-gray-700 mb-4">Press Counter</h2>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <p>Total Counts: <span id="pressCount" class="font-medium">Loading...</span></p>
-                <p>Last Pulse Duration: <span id="pulseDuration" class="font-medium">Loading...</span> ms</p>
-                <p>Last Pulse Time: <span id="lastPulseTime" class="font-medium">Loading...</span> ms</p>
-                <p>In Pulse Train: <span id="inPulseTrain" class="font-medium">Loading...</span></p>
-                <p>Pulse Train Start: <span id="pulseTrainStart" class="font-medium">Loading...</span> ms</p>
+        
+        <div class="tab-container">
+            <!-- Controls Tab -->
+            <div class="tab-content active" id="controls-tab">
+                <div class="grid">
+                    <div class="card">
+                        <div class="card-header">Relay Control</div>
+                        <div class="action-buttons">
+                            <button class="btn-primary" onclick="toggleRelay()">Toggle Relay</button>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">Buzzer Sounds</div>
+                        <div class="action-buttons">
+                            <button class="btn-success" onclick="playSuccessSound()">Success</button>
+                            <button class="btn-warning" onclick="playWarningSound()">Warning</button>
+                            <button class="btn-danger" onclick="playErrorSound()">Error</button>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">Pulse Counter</div>
+                        <div class="pulse-counter">
+                            <div class="form-group">
+                                <label>Total Count:</label>
+                                <div class="counter-value" id="pulse-count">0</div>
+                            </div>
+                            <div class="form-group">
+                                <label>Last Pulse Duration:</label>
+                                <div id="last-pulse-duration">0 ms</div>
+                            </div>
+                            <div class="form-group">
+                                <label>Last Pulse Time:</label>
+                                <div id="last-pulse-time">Never</div>
+                            </div>
+                            <div class="form-group">
+                                <label>Pulse Train Status:</label>
+                                <div id="pulse-train-status">Inactive</div>
+                            </div>
+                            <button class="btn-primary" onclick="updatePulseCounter()">Refresh</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Settings Tab -->
+            <div class="tab-content" id="settings-tab">
+                <div class="card">
+                    <div class="card-header">Device Configuration</div>
+                    <form id="settings-form">
+                        <div class="form-group">
+                            <label for="device">Device Name:</label>
+                            <input type="text" id="device" name="device" placeholder="Enter device name">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="influxHost">InfluxDB Host:</label>
+                            <input type="text" id="influxHost" name="influxHost" placeholder="Enter InfluxDB host">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="influxPort">InfluxDB Port:</label>
+                            <input type="number" id="influxPort" name="influxPort" placeholder="Enter InfluxDB port">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="influxBucket">InfluxDB Bucket:</label>
+                            <input type="text" id="influxBucket" name="influxBucket" placeholder="Enter InfluxDB bucket">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="influxOrg">InfluxDB Organization:</label>
+                            <input type="text" id="influxOrg" name="influxOrg" placeholder="Enter InfluxDB organization">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="influxToken">InfluxDB Token:</label>
+                            <input type="password" id="influxToken" name="influxToken" placeholder="Enter InfluxDB token">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="minPulseDuration">Minimum Pulse Duration (ms):</label>
+                            <input type="number" id="minPulseDuration" name="minPulseDuration" placeholder="Enter minimum pulse duration">
+                        </div>
+                        
+                        <button type="button" class="btn-primary" onclick="loadSettings()">Load Current Settings</button>
+                        <button type="button" class="btn-success" onclick="saveSettings()">Save Settings</button>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- NFC Tab -->
+            <div class="tab-content" id="nfc-tab">
+                <div class="card">
+                    <div class="card-header">NFC Tag Operations</div>
+                    <div class="form-group">
+                        <label for="tagText">Text to Write to NFC Tag:</label>
+                        <input type="text" id="tagText" placeholder="Enter text to write to NFC tag">
+                    </div>
+                    <button class="btn-primary" onclick="writeTag()">Write to NFC Tag</button>
+                    
+                    <div class="form-group" style="margin-top: 20px;">
+                        <label>Last Read Tag Data:</label>
+                        <div id="last-tag-data">No tag read yet</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Firmware Tab -->
+            <div class="tab-content" id="firmware-tab">
+                <div class="card">
+                    <div class="card-header">Firmware Update</div>
+                    <p>Update the device firmware by uploading a new binary file.</p>
+                    <div class="action-buttons">
+                        <button class="btn-primary" onclick="goToFirmwareUpdate()">Update Firmware</button>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">HTML Interface Update</div>
+                    <p>Upload a new HTML interface file to customize the web interface.</p>
+                    <form id="upload-form" action="/upload" method="POST" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label for="htmlFile">Select HTML File:</label>
+                            <input type="file" id="htmlFile" name="htmlFile" accept=".html">
+                        </div>
+                        <button type="submit" class="btn-primary">Upload HTML</button>
+                    </form>
+                </div>
             </div>
         </div>
-
-        <!-- Upload Tab -->
-        <div id="upload" class="tab bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-2xl font-semibold text-gray-700 mb-4">Upload New Interface</h2>
-            <form id="uploadForm" enctype="multipart/form-data" class="space-y-4">
-                <div>
-                    <label for="htmlFile" class="block text-sm font-medium text-gray-700">Select HTML File</label>
-                    <input type="file" id="htmlFile" name="htmlFile" accept=".html" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-                </div>
-                <div>
-                    <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition flex items-center">
-                        <span id="uploadLoading" class="hidden mr-2">⏳</span> Upload HTML
-                    </button>
-                </div>
-            </form>
-        </div>
-
-        <!-- Toast Notification -->
-        <div id="toast" class="toast"></div>
     </div>
 
     <script>
-        function showTab(tabId) {
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-                tab.style.opacity = '0';
+        // Tab switching functionality
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs and content
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                // Add active class to clicked tab
+                tab.classList.add('active');
+                
+                // Show corresponding content
+                const tabName = tab.getAttribute('data-tab');
+                document.getElementById(`${tabName}-tab`).classList.add('active');
             });
-            const activeTab = document.getElementById(tabId);
-            activeTab.classList.add('active');
-            setTimeout(() => { activeTab.style.opacity = '1'; }, 10);
-            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('bg-blue-700'));
-            document.querySelector(`button[onclick="showTab('${tabId}')"]`).classList.add('bg-blue-700');
-        }
-
-        function showToast(message, type = 'success') {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = `toast ${type} show`;
+        });
+        
+        // Show notification
+        function showNotification(message, isSuccess = true) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = isSuccess ? 'notification success' : 'notification error';
+            notification.style.display = 'block';
+            
+            // Hide notification after 5 seconds
             setTimeout(() => {
-                toast.className = `toast ${type}`;
-            }, 3000);
+                notification.style.display = 'none';
+            }, 5000);
         }
-
-        function showLoading(elementId) {
-            document.getElementById(elementId).classList.remove('hidden');
-        }
-
-        function hideLoading(elementId) {
-            document.getElementById(elementId).classList.add('hidden');
-        }
-
-        // Load settings on page load
-        fetch('/save')
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('device').value = data.device;
-                document.getElementById('influxHost').value = data.influxHost;
-                document.getElementById('influxPort').value = data.influxPort;
-                document.getElementById('influxBucket').value = data.influxBucket;
-                document.getElementById('influxOrg').value = data.influxOrg;
-                document.getElementById('influxToken').value = data.influxToken;
-                document.getElementById('debounceDelay').value = data.debounceDelay;
-            })
-            .catch(() => showToast('Failed to load settings', 'error'));
-
-        // Save settings
-        document.getElementById('settingsForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            showLoading('settingsLoading');
-            const formData = new FormData(this);
-            fetch('/save', {
-                method: 'POST',
-                body: formData
-            })
-                .then(response => response.text())
-                .then(data => {
-                    showToast(data, response.ok ? 'success' : 'error');
-                    hideLoading('settingsLoading');
-                })
-                .catch(() => {
-                    showToast('Failed to save settings', 'error');
-                    hideLoading('settingsLoading');
-                });
-        });
-
-        // Toggle relay
-        function toggleRelay() {
-            showLoading('relayLoading');
-            fetch('/relay', { method: 'POST' })
-                .then(response => response.text())
-                .then(data => {
-                    updateStatus();
-                    showToast('Relay toggled', 'success');
-                    hideLoading('relayLoading');
-                })
-                .catch(() => {
-                    showToast('Failed to toggle relay', 'error');
-                    hideLoading('relayLoading');
-                });
-        }
-
-        // Play sounds
-        function playErrorSound() {
-            showLoading('errorSoundLoading');
-            fetch('/buzzer_error', { method: 'POST' })
-                .then(response => response.text())
-                .then(data => {
-                    showToast(data, 'success');
-                    hideLoading('errorSoundLoading');
-                })
-                .catch(() => {
-                    showToast('Failed to play error sound', 'error');
-                    hideLoading('errorSoundLoading');
-                });
-        }
-
-        function playWarningSound() {
-            showLoading('warningSoundLoading');
-            fetch('/buzzer_warning', { method: 'POST' })
-                .then(response => response.text())
-                .then(data => {
-                    showToast(data, 'success');
-                    hideLoading('warningSoundLoading');
-                })
-                .catch(() => {
-                    showToast('Failed to play warning sound', 'error');
-                    hideLoading('warningSoundLoading');
-                });
-        }
-
-        function playSuccessSound() {
-            showLoading('successSoundLoading');
-            fetch('/buzzer_success', { method: 'POST' })
-                .then(response => response.text())
-                .then(data => {
-                    showToast(data, 'success');
-                    hideLoading('successSoundLoading');
-                })
-                .catch(() => {
-                    showToast('Failed to play success sound', 'error');
-                    hideLoading('successSoundLoading');
-                });
-        }
-
-        // Write NFC tag
-        document.getElementById('nfcForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            showLoading('nfcLoading');
-            const formData = new FormData(this);
-            fetch('/write_tag', {
-                method: 'POST',
-                body: formData
-            })
-                .then(response => response.text())
-                .then(data => {
-                    showToast(data, 'success');
-                    updateStatus();
-                    hideLoading('nfcLoading');
-                })
-                .catch(() => {
-                    showToast('Failed to write NFC tag', 'error');
-                    hideLoading('nfcLoading');
-                });
-        });
-
-        // Update status
+        
+        // Update device status
         function updateStatus() {
             fetch('/status')
                 .then(response => response.json())
                 .then(data => {
-                    document.getElementById('relayStatus').textContent = data.relayStatus;
-                    document.getElementById('buzzerStatus').textContent = data.buzzerStatus;
-                    document.getElementById('buttonStatus').textContent = data.buttonStatus;
-                    document.getElementById('tagData').textContent = data.tagData;
+                    document.getElementById('relay-status').textContent = data.relayStatus;
+                    document.getElementById('relay-status').className = `status-value ${data.relayStatus === 'On' ? 'status-on' : 'status-off'}`;
+                    
+                    document.getElementById('buzzer-status').textContent = data.buzzerStatus;
+                    document.getElementById('buzzer-status').className = `status-value ${data.buzzerStatus === 'On' ? 'status-on' : 'status-off'}`;
+                    
+                    document.getElementById('button-status').textContent = data.buttonStatus;
+                    document.getElementById('button-status').className = `status-value ${data.buttonStatus === 'Pressed' ? 'status-on' : 'status-off'}`;
+                    
+                    document.getElementById('tag-data').textContent = data.tagData || 'No tag read';
+                    document.getElementById('last-tag-data').textContent = data.tagData || 'No tag read yet';
                 })
-                .catch(() => showToast('Failed to update status', 'error'));
+                .catch(error => {
+                    console.error('Error fetching status:', error);
+                });
         }
-
-        // Update press counter
-        function updatePressCounter() {
+        
+        // Update pulse counter
+        function updatePulseCounter() {
             fetch('/press_counter')
                 .then(response => response.json())
                 .then(data => {
-                    document.getElementById('pressCount').textContent = data.count;
-                    document.getElementById('pulseDuration').textContent = data.lastPulseDuration;
-                    document.getElementById('lastPulseTime').textContent = data.lastPulseTime;
-                    document.getElementById('inPulseTrain').textContent = data.inPulseTrain ? "Yes" : "No";
-                    document.getElementById('pulseTrainStart').textContent = data.pulseTrainStart;
+                    document.getElementById('pulse-count').textContent = data.count;
+                    document.getElementById('last-pulse-duration').textContent = `${data.lastPulseDuration} ms`;
+                    document.getElementById('last-pulse-time').textContent = data.lastPulseTime ? new Date(data.lastPulseTime * 1000).toLocaleString() : 'Never';
+                    document.getElementById('pulse-train-status').textContent = data.inPulseTrain ? 'Active' : 'Inactive';
                 })
-                .catch(() => showToast('Failed to update press counter', 'error'));
+                .catch(error => {
+                    console.error('Error fetching pulse counter:', error);
+                });
         }
-
-        // Upload HTML
-        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        
+        // Toggle relay
+        function toggleRelay() {
+            fetch('/relay', { method: 'POST' })
+                .then(response => response.text())
+                .then(data => {
+                    showNotification('Relay toggled successfully', true);
+                    updateStatus();
+                })
+                .catch(error => {
+                    console.error('Error toggling relay:', error);
+                    showNotification('Error toggling relay', false);
+                });
+        }
+        
+        // Play sounds
+        function playErrorSound() {
+            fetch('/buzzer_error', { method: 'POST' })
+                .then(response => response.text())
+                .then(data => {
+                    showNotification('Error sound played', true);
+                })
+                .catch(error => {
+                    console.error('Error playing error sound:', error);
+                    showNotification('Error playing sound', false);
+                });
+        }
+        
+        function playWarningSound() {
+            fetch('/buzzer_warning', { method: 'POST' })
+                .then(response => response.text())
+                .then(data => {
+                    showNotification('Warning sound played', true);
+                })
+                .catch(error => {
+                    console.error('Error playing warning sound:', error);
+                    showNotification('Error playing sound', false);
+                });
+        }
+        
+        function playSuccessSound() {
+            fetch('/buzzer_success', { method: 'POST' })
+                .then(response => response.text())
+                .then(data => {
+                    showNotification('Success sound played', true);
+                })
+                .catch(error => {
+                    console.error('Error playing success sound:', error);
+                    showNotification('Error playing sound', false);
+                });
+        }
+        
+        // Write to NFC tag
+        function writeTag() {
+            const tagText = document.getElementById('tagText').value;
+            if (!tagText) {
+                showNotification('Please enter text to write to the tag', false);
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('tagText', tagText);
+            
+            fetch('/write_tag', { 
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(data => {
+                showNotification('Ready to write to NFC tag. Please place a tag near the reader.', true);
+                document.getElementById('last-tag-data').textContent = 'Waiting for tag...';
+            })
+            .catch(error => {
+                console.error('Error writing to tag:', error);
+                showNotification('Error preparing to write to tag', false);
+            });
+        }
+        
+        // Load settings
+        function loadSettings() {
+            fetch('/save')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('device').value = data.device || '';
+                    document.getElementById('influxHost').value = data.influxHost || '';
+                    document.getElementById('influxPort').value = data.influxPort || '';
+                    document.getElementById('influxBucket').value = data.influxBucket || '';
+                    document.getElementById('influxOrg').value = data.influxOrg || '';
+                    document.getElementById('influxToken').value = data.influxToken || '';
+                    document.getElementById('minPulseDuration').value = data.minPulseDuration || '';
+                    
+                    showNotification('Settings loaded successfully', true);
+                })
+                .catch(error => {
+                    console.error('Error loading settings:', error);
+                    showNotification('Error loading settings', false);
+                });
+        }
+        
+        // Save settings
+        function saveSettings() {
+            const formData = new FormData();
+            formData.append('device', document.getElementById('device').value);
+            formData.append('influxHost', document.getElementById('influxHost').value);
+            formData.append('influxPort', document.getElementById('influxPort').value);
+            formData.append('influxBucket', document.getElementById('influxBucket').value);
+            formData.append('influxOrg', document.getElementById('influxOrg').value);
+            formData.append('influxToken', document.getElementById('influxToken').value);
+            formData.append('minPulseDuration', document.getElementById('minPulseDuration').value);
+            
+            fetch('/save', { 
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(data => {
+                showNotification('Settings saved successfully', true);
+            })
+            .catch(error => {
+                console.error('Error saving settings:', error);
+                showNotification('Error saving settings', false);
+            });
+        }
+        
+        // Go to firmware update page
+        function goToFirmwareUpdate() {
+            window.location.href = '/update';
+        }
+        
+        // Handle form submission for HTML upload
+        document.getElementById('upload-form').addEventListener('submit', function(e) {
             e.preventDefault();
-            showLoading('uploadLoading');
             const formData = new FormData(this);
+            
             fetch('/upload', {
                 method: 'POST',
                 body: formData
             })
-                .then(response => response.text())
-                .then(data => {
-                    showToast(data, 'success');
-                    setTimeout(() => location.reload(), 1000);
-                    hideLoading('uploadLoading');
-                })
-                .catch(() => {
-                    showToast('Failed to upload HTML', 'error');
-                    hideLoading('uploadLoading');
-                });
+            .then(response => response.text())
+            .then(data => {
+                showNotification('HTML file uploaded successfully. Page will refresh.', true);
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            })
+            .catch(error => {
+                console.error('Error uploading HTML:', error);
+                showNotification('Error uploading HTML file', false);
+            });
         });
-
-        // Periodically update status and press counter
-        setInterval(() => {
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
             updateStatus();
-            updatePressCounter();
-        }, 1000);
-
-        // Initial tab and status
-        showTab('settings');
-        updateStatus();
-        updatePressCounter();
+            updatePulseCounter();
+            
+            // Update status every 5 seconds
+            setInterval(updateStatus, 5000);
+        });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9794c5b81ce9b8d2',t:'MTc1Njg5NzUyOS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>

@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include "ConfigManager.h"
+#include "InfluxDB.h"
 #include "define.h"
 
 struct DeviceStatus {
@@ -17,7 +18,7 @@ public:
   void begin();
   void handleButton();
   DeviceStatus getStatus();
-  void setRelayState(bool state, bool toggle = false);
+  void setRelayState(bool state, bool toggle = false, InfluxDB* influxDB = nullptr);
   void playErrorSound();
   void playWarningSound();
   void playSuccessSound();

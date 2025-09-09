@@ -1,6 +1,7 @@
 #include "WebServerManager.h"
 #include <FS.h>
 #include <ESP8266WiFi.h>
+#include <Updater.h>
 
 WebServerManager::WebServerManager(ESP8266WebServer& srv, ConfigManager& cfg, ControlManager& ctrl, NfcManager& nfc, PressCounter& pc)
   : server(srv), configManager(cfg), controlManager(ctrl), nfcManager(nfc), pressCounter(pc), lastTagData("No tag read") {
@@ -27,33 +28,34 @@ void WebServerManager::setupRoutes() {
   server.on("/write_tag", HTTP_POST, std::bind(&WebServerManager::handleWriteTag, this));
   server.on("/status", HTTP_GET, std::bind(&WebServerManager::handleStatus, this));
   server.on("/update", HTTP_GET, std::bind(&WebServerManager::handleUpdate, this));
-  server.on("/update", HTTP_POST, [this]() {
+  // In setupRoutes(), modify the update handler:
+server.on("/update", HTTP_POST, [this]() {
     server.sendHeader("Connection", "close");
     server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
     ESP.restart();
-  }, [this]() {
+}, [this]() {
     HTTPUpload& upload = server.upload();
     if (upload.status == UPLOAD_FILE_START) {
-      Serial.setDebugOutput(true);
-      Serial.printf("Update: %s\n", upload.filename.c_str());
-      uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
-      if (!Update.begin(maxSketchSpace)) {
-        Update.printError(Serial);
-      }
+        Serial.setDebugOutput(true);
+        Serial.printf("Update: %s\n", upload.filename.c_str());
+        uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+        if (!Update.begin(maxSketchSpace, U_FLASH)) {  // Specify U_FLASH for firmware update
+            Update.printError(Serial);
+        }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
-      if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-        Update.printError(Serial);
-      }
+        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+            Update.printError(Serial);
+        }
     } else if (upload.status == UPLOAD_FILE_END) {
-      if (Update.end(true)) {
-        Serial.printf("Update Success: %u\nRebooting...\n", upload.totalSize);
-      } else {
-        Update.printError(Serial);
-      }
-      Serial.setDebugOutput(false);
+        if (Update.end(true)) {
+            Serial.printf("Update Success: %u\nRebooting...\n", upload.totalSize);
+        } else {
+            Update.printError(Serial);
+        }
+        Serial.setDebugOutput(false);
     }
     yield();
-  });
+});
   server.on("/status/file", HTTP_GET, std::bind(&WebServerManager::handleFileStatus, this));
   server.on("/press_counter", HTTP_GET, std::bind(&WebServerManager::handlePressCounterStatus, this));
 }
@@ -78,7 +80,7 @@ void WebServerManager::handleGetSettings() {
   json += "\"influxBucket\":\"" + String(config.influxBucket) + "\",";
   json += "\"influxOrg\":\"" + String(config.influxOrg) + "\",";
   json += "\"influxToken\":\"" + String(config.influxToken) + "\",";
-  json += "\"debounceDelay\":" + String(config.debounceDelay);
+  json += "\"minPulseDuration\":" + String(config.minPulseDuration);
   json += "}";
   server.send(200, "application/json", json);
 }
@@ -160,14 +162,15 @@ void WebServerManager::handleSaveSettings() {
     strlcpy(config.influxToken, server.arg("influxToken").c_str(), sizeof(config.influxToken));
     updated = true;
   }
-  if (server.hasArg("debounceDelay") && server.arg("debounceDelay").length() > 0) {
-    config.debounceDelay = server.arg("debounceDelay").toInt();
+  if (server.hasArg("minPulseDuration") && server.arg("minPulseDuration").length() > 0) {
+    config.minPulseDuration = server.arg("minPulseDuration").toInt();
     updated = true;
   }
   if (updated) {
     configManager.set(config);
     if (configManager.save()) {
       Serial.println("Configuration saved successfully");
+      pressCounter.updateMinPulseDuration();
       server.send(200, "text/plain", "Settings saved");
     } else {
       Serial.println("Failed to save configuration");
@@ -232,8 +235,18 @@ void WebServerManager::handleFileStatus() {
 void WebServerManager::handleUpdate() {
   String page = "<html><head><title>ESP OTA Update</title>";
   page += "<style>body{font-family:Arial,sans-serif;padding:20px}.control{margin:10px 0}input,button{padding:8px;margin:5px}</style>";
-  page += "<body><h2>ESP OTA Update</h2>";
-  page += "<form method='POST' action='/update' enctype='multipart/form-data'>";
+  page += "<script>";
+  page += "function showUpdateResult(message, isSuccess) {";
+  page += "  document.getElementById('result').innerHTML = message;";
+  page += "  document.getElementById('result').className = isSuccess ? 'success' : 'error';";
+  page += "  if (isSuccess) {";
+  page += "    setTimeout(function() { window.location.href = '/'; }, 3000);";
+  page += "  }";
+  page += "}";
+  page += "</script>";
+  page += "</head><body><h2>ESP OTA Update</h2>";
+  page += "<div id='result'></div>";
+  page += "<form method='POST' action='/update' enctype='multipart/form-data' onsubmit='showUpdateResult(\"Uploading...\", true)'>";
   page += "<div class='control'><input type='file' name='update'></div>";
   page += "<div class='control'><input type='submit' value='Update'></div></form></body></html>";
   server.send(200, "text/html", page);
