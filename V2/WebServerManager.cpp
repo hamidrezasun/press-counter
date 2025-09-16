@@ -233,7 +233,7 @@ void WebServerManager::handleFileStatus() {
 }
 
 void WebServerManager::handleUpdate() {
-  String page = "<html><head><title>ESP OTA Update</title>";
+  String page = "<html><head><title>Press OTA Update</title>";
   page += "<style>body{font-family:Arial,sans-serif;padding:20px}.control{margin:10px 0}input,button{padding:8px;margin:5px}</style>";
   page += "<script>";
   page += "function showUpdateResult(message, isSuccess) {";
@@ -244,7 +244,7 @@ void WebServerManager::handleUpdate() {
   page += "  }";
   page += "}";
   page += "</script>";
-  page += "</head><body><h2>ESP OTA Update</h2>";
+  page += "</head><body><h2>Press OTA Update</h2>";
   page += "<div id='result'></div>";
   page += "<form method='POST' action='/update' enctype='multipart/form-data' onsubmit='showUpdateResult(\"Uploading...\", true)'>";
   page += "<div class='control'><input type='file' name='update'></div>";

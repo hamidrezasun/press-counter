@@ -1,8 +1,6 @@
 #include "PressCounter.h"
 #include "ConfigManager.h"
 
-PressCounter* PressCounter::instance = nullptr;
-
 PressCounter::PressCounter(uint8_t pin, InfluxDB& influx, ConfigManager& cfg, ControlManager& ctrl)
   : counterPin(pin), influxDB(influx), configManager(cfg), controlManager(ctrl), pulseStart(0), 
     lastPulseDuration(0), lastPulseTime(0), pulseCount(0), inPulseTrain(false), 
@@ -10,54 +8,48 @@ PressCounter::PressCounter(uint8_t pin, InfluxDB& influx, ConfigManager& cfg, Co
   minPulseDuration = configManager.get().minPulseDuration;
 }
 
-void ICACHE_RAM_ATTR PressCounter::handlePulse() {
-  if (PressCounter::instance) {
-    int pinState = digitalRead(PressCounter::instance->counterPin);
-    unsigned long currentMillis = millis();
-    
-    if (pinState == LOW) {
-      if (PressCounter::instance->pulseStart == 0) {
-        PressCounter::instance->pulseStart = currentMillis;
-        if (!PressCounter::instance->inPulseTrain) {
-          PressCounter::instance->inPulseTrain = true;
-          PressCounter::instance->pulseTrainStart = currentMillis;
-        }
-      }
-    } else {
-      if (PressCounter::instance->pulseStart > 0) {
-        unsigned long duration = currentMillis - PressCounter::instance->pulseStart;
-        
-        if (duration >= PressCounter::instance->minPulseDuration) {
-          PressCounter::instance->lastPulseDuration = duration;
-          PressCounter::instance->lastPulseTime = currentMillis;
-          PressCounter::instance->pulseCount++;
-          
-          char fields[32];
-          snprintf(fields, sizeof(fields), "count=%ui", PressCounter::instance->pulseCount);
-          PressCounter::instance->influxDB.sendData("press_counter", fields);
-          
-          PressCounter::instance->controlManager.playSuccessSound();
-        }
-        PressCounter::instance->pulseStart = 0;
-      }
-    }
-  }
-}
-
 void PressCounter::begin() {
-  instance = this;
   pinMode(counterPin, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(counterPin), handlePulse, CHANGE);
   
   minPulseDuration = configManager.get().minPulseDuration;
   
-  Serial.println("PressCounter initialized with interrupt");
+  Serial.println("PressCounter initialized with polling");
   Serial.print("Min pulse duration: ");
   Serial.print(minPulseDuration);
   Serial.println("ms");
 }
 
 void PressCounter::handle() {
+  int pinState = digitalRead(counterPin);
+  unsigned long currentMillis = millis();
+  
+  if (pinState == LOW) {
+    if (pulseStart == 0) {
+      pulseStart = currentMillis;
+      if (!inPulseTrain) {
+        inPulseTrain = true;
+        pulseTrainStart = currentMillis;
+      }
+    }
+  } else {
+    if (pulseStart > 0) {
+      unsigned long duration = currentMillis - pulseStart;
+      
+      if (duration >= minPulseDuration) {
+        lastPulseDuration = duration;
+        lastPulseTime = currentMillis;
+        pulseCount++;
+        
+        char fields[32];
+        snprintf(fields, sizeof(fields), "count=%u", pulseCount);
+        influxDB.sendData("press_counter", fields);
+        
+        controlManager.playSuccessSound();
+      }
+      pulseStart = 0;
+    }
+  }
+  
   if (inPulseTrain && (millis() - lastPulseTime > 1000)) {
     inPulseTrain = false;
     pulseTrainStart = 0;
@@ -65,14 +57,12 @@ void PressCounter::handle() {
 }
 
 void PressCounter::reset() {
-  noInterrupts();
   pulseCount = 0;
   lastPulseTime = 0;
   lastPulseDuration = 0;
   inPulseTrain = false;
   pulseTrainStart = 0;
   pulseStart = 0;
-  interrupts();
   Serial.println("PressCounter reset");
 }
 

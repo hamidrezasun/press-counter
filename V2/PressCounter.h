@@ -24,16 +24,13 @@ private:
   InfluxDB& influxDB;
   ConfigManager& configManager;
   ControlManager& controlManager;
-  volatile unsigned long pulseStart;
-  volatile unsigned long lastPulseDuration;
-  volatile unsigned long lastPulseTime;
-  volatile unsigned int pulseCount;
-  volatile bool inPulseTrain;
-  volatile unsigned long pulseTrainStart;
+  unsigned long pulseStart;
+  unsigned long lastPulseDuration;
+  unsigned long lastPulseTime;
+  unsigned int pulseCount;
+  bool inPulseTrain;
+  unsigned long pulseTrainStart;
   unsigned long minPulseDuration;
-  
-  static void ICACHE_RAM_ATTR handlePulse();
-  static PressCounter* instance;
 };
 
 #endif
