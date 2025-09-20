@@ -32,6 +32,7 @@ void setup() {
   pressCounter.begin();
   if(!nfcManager.begin()){
     controlManager.playErrorSound();
+    Serial.println("NFC not connected!");
   }
   webManager.begin();
   influxDB.begin();
@@ -55,12 +56,12 @@ void setup() {
   } else {
     controlManager.playErrorSound();
   }
+  controlManager.startTemperatureReporting();
 }
 
 void loop() {
     webManager.handleClient();
     controlManager.handleButton();
-    controlManager.buzzerLoop();
     pressCounter.handle();
     
     // Check if press counter has been idle for 10 minutes
@@ -70,9 +71,10 @@ void loop() {
         controlManager.setRelayState(false, false, &influxDB);
         Serial.println("Turned off relay due to 10-minute inactivity");
     }
+    
     unsigned long nfcCurrentMillis = millis();
     if (nfcCurrentMillis - nfcPreviousMillis >= nfcINTERVAL) {
       nfcPreviousMillis = nfcCurrentMillis;
-      nfcManager.handleNfcLoop(webManager, controlManager, influxDB);
+      nfcManager.handleNfcLoop(webManager, controlManager, influxDB, pressCounter);  // Add pressCounter parameter
     }
 }

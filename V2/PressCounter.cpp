@@ -44,7 +44,7 @@ void PressCounter::handle() {
         snprintf(fields, sizeof(fields), "count=%u", pulseCount);
         influxDB.sendData("press_counter", fields);
         
-        controlManager.playSuccessSound();
+        controlManager.playSuccessSound(300);
       }
       pulseStart = 0;
     }

@@ -1,7 +1,6 @@
 #include "WebServerManager.h"
 #include <FS.h>
 #include <ESP8266WiFi.h>
-#include <Updater.h>
 
 WebServerManager::WebServerManager(ESP8266WebServer& srv, ConfigManager& cfg, ControlManager& ctrl, NfcManager& nfc, PressCounter& pc)
   : server(srv), configManager(cfg), controlManager(ctrl), nfcManager(nfc), pressCounter(pc), lastTagData("No tag read") {
@@ -27,35 +26,6 @@ void WebServerManager::setupRoutes() {
   server.on("/buzzer_success", HTTP_POST, std::bind(&WebServerManager::handleBuzzerSuccess, this));
   server.on("/write_tag", HTTP_POST, std::bind(&WebServerManager::handleWriteTag, this));
   server.on("/status", HTTP_GET, std::bind(&WebServerManager::handleStatus, this));
-  server.on("/update", HTTP_GET, std::bind(&WebServerManager::handleUpdate, this));
-  // In setupRoutes(), modify the update handler:
-server.on("/update", HTTP_POST, [this]() {
-    server.sendHeader("Connection", "close");
-    server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
-    ESP.restart();
-}, [this]() {
-    HTTPUpload& upload = server.upload();
-    if (upload.status == UPLOAD_FILE_START) {
-        Serial.setDebugOutput(true);
-        Serial.printf("Update: %s\n", upload.filename.c_str());
-        uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
-        if (!Update.begin(maxSketchSpace, U_FLASH)) {  // Specify U_FLASH for firmware update
-            Update.printError(Serial);
-        }
-    } else if (upload.status == UPLOAD_FILE_WRITE) {
-        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-            Update.printError(Serial);
-        }
-    } else if (upload.status == UPLOAD_FILE_END) {
-        if (Update.end(true)) {
-            Serial.printf("Update Success: %u\nRebooting...\n", upload.totalSize);
-        } else {
-            Update.printError(Serial);
-        }
-        Serial.setDebugOutput(false);
-    }
-    yield();
-});
   server.on("/status/file", HTTP_GET, std::bind(&WebServerManager::handleFileStatus, this));
   server.on("/press_counter", HTTP_GET, std::bind(&WebServerManager::handlePressCounterStatus, this));
 }
@@ -232,30 +202,6 @@ void WebServerManager::handleFileStatus() {
   server.send(200, "application/json", json);
 }
 
-void WebServerManager::handleUpdate() {
-  String page = "<html><head><title>Press OTA Update</title>";
-  page += "<style>body{font-family:Arial,sans-serif;padding:20px}.control{margin:10px 0}input,button{padding:8px;margin:5px}</style>";
-  page += "<script>";
-  page += "function showUpdateResult(message, isSuccess) {";
-  page += "  document.getElementById('result').innerHTML = message;";
-  page += "  document.getElementById('result').className = isSuccess ? 'success' : 'error';";
-  page += "  if (isSuccess) {";
-  page += "    setTimeout(function() { window.location.href = '/'; }, 3000);";
-  page += "  }";
-  page += "}";
-  page += "</script>";
-  page += "</head><body><h2>Press OTA Update</h2>";
-  page += "<div id='result'></div>";
-  page += "<form method='POST' action='/update' enctype='multipart/form-data' onsubmit='showUpdateResult(\"Uploading...\", true)'>";
-  page += "<div class='control'><input type='file' name='update'></div>";
-  page += "<div class='control'><input type='submit' value='Update'></div></form></body></html>";
-  server.send(200, "text/html", page);
-}
-
-void WebServerManager::handleUploadFirmware() {
-  // Handled in setupRoutes()
-}
-
 void WebServerManager::begin() {
   if (!SPIFFS.begin()) {
     Serial.println("Failed to mount SPIFFS");
@@ -267,10 +213,34 @@ void WebServerManager::begin() {
   setupRoutes();
   server.begin();
   Serial.println("Web server started");
+
+  // Initialize ArduinoOTA
+  ArduinoOTA.setHostname(configManager.get().device);
+  ArduinoOTA.setPassword("admin");
+  ArduinoOTA.onStart([]() {
+    Serial.println("OTA Update: Start");
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nOTA Update: End");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("OTA Update: Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("OTA Update: Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+  ArduinoOTA.begin();
+  Serial.println("OTA Update service started");
 }
 
 void WebServerManager::handleClient() {
   server.handleClient();
+  ArduinoOTA.handle();
 }
 
 void WebServerManager::updateStatus() {

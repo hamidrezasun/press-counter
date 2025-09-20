@@ -3,10 +3,11 @@
 
 #include <ESP8266WebServer.h>
 #include <FS.h>
+#include <ArduinoOTA.h>
 #include "ConfigManager.h"
 #include "ControlManager.h"
 #include "NfcManager.h"
-#include "PressCounter.h" // Include PressCounter header
+#include "PressCounter.h"
 
 struct CallbackData {
   ConfigManager* configManager;
@@ -25,7 +26,7 @@ private:
   ConfigManager& configManager;
   ControlManager& controlManager;
   NfcManager& nfcManager;
-  PressCounter& pressCounter; // Add PressCounter reference
+  PressCounter& pressCounter;
   String lastTagData;
   File uploadFile;
   void setupRoutes();
@@ -38,11 +39,9 @@ private:
   void handleBuzzerSuccess();
   void handleWriteTag();
   void handleStatus();
-  void handleUpdate();
-  void handleUploadFirmware();
   void handleFileStatus();
   void handleGetSettings();
-  void handlePressCounterStatus(); // New method for press counter status
+  void handlePressCounterStatus();
 };
 
 #endif

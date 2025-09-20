@@ -1,10 +1,11 @@
 #include "NfcManager.h"
 #include "WebServerManager.h"
 #include "ControlManager.h"
-#include "InfluxDB.h" // Added include
-#include <Arduino.h>  // Added for millis()
+#include "InfluxDB.h"
+#include "PressCounter.h"  // Add include
+#include <Arduino.h>
 
-NfcManager::NfcManager() : mfrc522(CS_PIN, RST_PIN), nfc(&mfrc522), pendingTagWrite(false) {
+NfcManager::NfcManager() : mfrc522(CS_PIN, -1), nfc(&mfrc522), pendingTagWrite(false) {
   lastTagData[0] = '\0';
   pendingTagData[0] = '\0';
 }
@@ -85,7 +86,8 @@ void NfcManager::setPendingWrite(const char* text) {
   Serial.println(text);
 }
 
-bool NfcManager::handleNfcLoop(WebServerManager& webManager, ControlManager& controlManager, InfluxDB& influxDB) {
+bool NfcManager::handleNfcLoop(WebServerManager& webManager, ControlManager& controlManager, 
+                              InfluxDB& influxDB, PressCounter& pressCounter) {  // Add PressCounter parameter
   bool result = false;
   
   // Handle pending write first (highest priority)
@@ -96,13 +98,14 @@ bool NfcManager::handleNfcLoop(WebServerManager& webManager, ControlManager& con
       result = true;
       controlManager.setRelayState(true, true);
       controlManager.playSuccessSound();
+      pressCounter.reset();  // Reset press counter on successful write
     } else {
       Serial.println("Write failed");
       pendingTagWrite = false;
       pendingTagData[0] = '\0';
       result = false;
     }
-  }else if (!pendingTagWrite && nfc.tagPresent()) {
+  } else if (!pendingTagWrite && nfc.tagPresent()) {
     // Read tag
     const char* currentTag = readTag();
     bool hasTagData = (strlen(currentTag) > 0);
@@ -111,9 +114,12 @@ bool NfcManager::handleNfcLoop(WebServerManager& webManager, ControlManager& con
       Serial.print("Tag Data: ");
       Serial.println(currentTag);
       controlManager.setRelayState(true, true);
-      controlManager.playSuccessSound();
-      // Send tag data to InfluxDB
-     // Send tag data and relay status to InfluxDB
+      controlManager.playSuccessSound(1500);
+      
+      // Reset press counter when tag is detected
+      pressCounter.reset();
+      
+      // Send tag data and relay status to InfluxDB
       DeviceStatus status = controlManager.getStatus();
       char fields[256];
       snprintf(fields, sizeof(fields), "tag_data=\"%s\",action=\"read\",relay_state=%s", 
@@ -128,6 +134,7 @@ bool NfcManager::handleNfcLoop(WebServerManager& webManager, ControlManager& con
   
   return result;
 }
+
 
 bool NfcManager::isPendingWrite() const {
   return pendingTagWrite;
