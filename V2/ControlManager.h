@@ -26,9 +26,10 @@ public:
   void playStartupTone(int frequency = 1000);
   void buzzerLoop(); // Non-blocking buzzer handling
   float readTemperature();
-  void startTemperatureReporting(); // New method to start periodic reporting
-  void stopTemperatureReporting();  // New method to stop periodic reporting
-  
+  void startTemperatureReporting();
+  void stopTemperatureReporting();
+  void shift74HC595(uint8_t binaryData); // New method to send raw binary to 74HC595
+
 private:
   ConfigManager& configManager;
   InfluxDB* influxDB; // Store InfluxDB instance
@@ -42,11 +43,11 @@ private:
   int buzzerStep;
   int currentFrequency; // Store current frequency
   Ticker buzzerTicker;
-  Ticker temperatureTicker; // New Ticker for temperature reporting
+  Ticker temperatureTicker; // Ticker for temperature reporting
   void startBuzzer(BuzzerMode mode, int frequency = 1000);
   void buzzerCallback(); // Callback for Ticker
   void stopBuzzer();
-  void sendTemperatureToInflux(); // New method for sending temperature
+  void sendTemperatureToInflux(); // Method for sending temperature
 };
 
 #endif

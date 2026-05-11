@@ -122,7 +122,7 @@ bool NfcManager::handleNfcLoop(WebServerManager& webManager, ControlManager& con
       // Send tag data and relay status to InfluxDB
       DeviceStatus status = controlManager.getStatus();
       char fields[256];
-      snprintf(fields, sizeof(fields), "tag_data=\"%s\",action=\"read\",relay_state=%s", 
+      snprintf(fields, sizeof(fields), "tag_data=\"%s\",relay_state=%s", 
                currentTag, status.relayOn ? "true" : "false");
       influxDB.sendData("nfc_event", fields);
     }

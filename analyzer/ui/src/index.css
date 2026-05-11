@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Vazirmatn', sans-serif;
+}
+
+/* Fix for ECharts tooltips in RTL */
+.echarts-tooltip {
+  direction: ltr !important;
+  text-align: left !important;
+}

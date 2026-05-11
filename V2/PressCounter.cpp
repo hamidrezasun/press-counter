@@ -40,10 +40,12 @@ void PressCounter::handle() {
         lastPulseTime = currentMillis;
         pulseCount++;
         
-        char fields[32];
-        snprintf(fields, sizeof(fields), "count=%u", pulseCount);
-        influxDB.sendData("press_counter", fields);
-        
+        // Send pulse count, pulse duration, and temperature to InfluxDB
+        float temperature = controlManager.readTemperature();
+        char fields[64];
+        snprintf(fields, sizeof(fields), "count=%u,duration=%lu,temperature=%.2f", 
+                 pulseCount, lastPulseDuration, temperature);
+        influxDB.sendData("press_counter", fields);        
         controlManager.playSuccessSound(300);
       }
       pulseStart = 0;

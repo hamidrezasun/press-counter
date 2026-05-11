@@ -1,17 +1,23 @@
 #include "ControlManager.h"
 
 ControlManager::ControlManager(ConfigManager& cfg, InfluxDB* influx)
-  : configManager(cfg), influxDB(influx), relayState(false), buzzerState(false), buttonState(false),
-    lastDebounceTime(0), lastButtonReading(true), buzzerMode(IDLE), buzzerStep(0), currentFrequency(1000) {}
+  : configManager(cfg), influxDB(influx), relayState(false), buzzerState(false),
+    buttonState(false), lastDebounceTime(0), lastButtonReading(false),
+    buzzerMode(IDLE), buzzerStep(0), currentFrequency(1000),
+    temperatureTicker() {
+}
 
 void ControlManager::begin() {
   pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, LOW); // Relay off initially
-  pinMode(BUTTON_PIN, INPUT_PULLUP); // Button with internal pull-up
   pinMode(BUZZER_PIN, OUTPUT);
-  digitalWrite(BUZZER_PIN, LOW); // Buzzer off initially
-  pinMode(TEMP_SENSOR_PIN, INPUT); // Initialize temperature sensor pin
-  Serial.println("ControlManager initialized");
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(DIN_MAX, OUTPUT); // 74HC595 DS (data)
+  pinMode(CLK_MAX, OUTPUT); // 74HC595 SHCP (shift clock)
+  pinMode(CS_MAX, OUTPUT);  // 74HC595 STCP (latch)
+  digitalWrite(RELAY_PIN, LOW);
+  digitalWrite(BUZZER_PIN, LOW);
+  digitalWrite(CS_MAX, HIGH); // Latch high by default
+  Serial.println("ControlManager initialized with 74HC595");
 }
 
 void ControlManager::handleButton() {
@@ -22,7 +28,9 @@ void ControlManager::handleButton() {
   if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY) {
     if (reading != buttonState) {
       buttonState = reading;
-      Serial.println("Button state changed to: " + String(buttonState ? "Pressed" : "Released"));
+      if (buttonState == LOW) {
+        setRelayState(!relayState, true, influxDB);
+      }
     }
   }
   lastButtonReading = reading;
@@ -33,156 +41,13 @@ DeviceStatus ControlManager::getStatus() {
 }
 
 void ControlManager::setRelayState(bool state, bool toggle, InfluxDB* influxDB) {
-  if (toggle) {
-    relayState = !relayState;
-  } else {
-    relayState = state;
-  }
+  relayState = toggle ? !relayState : state;
   digitalWrite(RELAY_PIN, relayState ? HIGH : LOW);
-  Serial.println("Relay state set to: " + String(relayState ? "On" : "Off"));
-  
-  // Send to InfluxDB if provided
-  if (influxDB != nullptr) {
+  if (influxDB) {
     char fields[32];
-    snprintf(fields, sizeof(fields), "state=%s", relayState ? "true" : "false");
-    influxDB->sendData("relay", fields);
+    snprintf(fields, sizeof(fields), "relay=%d", relayState ? 1 : 0);
+    influxDB->sendData("device_status", fields);
   }
-}
-
-void ControlManager::startBuzzer(BuzzerMode mode, int frequency) {
-  if (buzzerMode != IDLE) {
-    Serial.println("Buzzer already active, ignoring new mode: " + String(mode));
-    return; // Prevent interrupting an ongoing buzzer sequence
-  }
-  buzzerMode = mode;
-  buzzerStep = 0;
-  buzzerState = true;
-  currentFrequency = frequency;
-  tone(BUZZER_PIN, currentFrequency); // Start with specified frequency
-  Serial.println("Starting buzzer mode: " + String(mode) + " at frequency: " + String(frequency) + " Hz");
-
-  // Set up Ticker based on mode
-  switch (mode) {
-    case BLINKING:
-      buzzerTicker.attach_ms(500, [this]() { buzzerCallback(); }); // 500ms blink interval
-      break;
-    case ERROR:
-      buzzerTicker.attach_ms(200, [this]() { buzzerCallback(); }); // 200ms for error beeps
-      break;
-    case WARNING:
-      buzzerTicker.attach_ms(500, [this]() { buzzerCallback(); }); // 500ms for warning beep
-      break;
-    case SUCCESS:
-      buzzerTicker.attach_ms(100, [this]() { buzzerCallback(); }); // 100ms for success beep
-      break;
-    case STARTUP:
-      buzzerTicker.attach_ms(150, [this]() { buzzerCallback(); }); // 150ms for startup beeps
-      break;
-    default:
-      stopBuzzer();
-      break;
-  }
-}
-
-void ControlManager::stopBuzzer() {
-  buzzerMode = IDLE;
-  buzzerState = false;
-  noTone(BUZZER_PIN);
-  buzzerTicker.detach();
-}
-
-void ControlManager::buzzerCallback() {
-  if (buzzerMode == IDLE) {
-    stopBuzzer();
-    return;
-  }
-
-  if (buzzerMode == BLINKING) {
-    buzzerState = !buzzerState;
-    if (buzzerState) {
-      tone(BUZZER_PIN, currentFrequency); // Use stored frequency
-    } else {
-      noTone(BUZZER_PIN);
-    }
-    Serial.println("Blinking buzzer toggled: " + String(buzzerState ? "On" : "Off"));
-  } else if (buzzerMode == ERROR) {
-    if (buzzerStep < 6) { // 6 steps: 3 beeps (on-off-on-off-on-off)
-      buzzerState = !buzzerState;
-      if (buzzerState) {
-        tone(BUZZER_PIN, currentFrequency); // Use stored frequency
-      } else {
-        noTone(BUZZER_PIN);
-      }
-      buzzerStep++;
-    } else {
-      stopBuzzer();
-      Serial.println("ERROR sequence complete");
-    }
-  } else if (buzzerMode == WARNING) {
-    if (buzzerStep == 0) {
-      buzzerState = false;
-      noTone(BUZZER_PIN);
-      buzzerStep++;
-    } else {
-      stopBuzzer();
-      Serial.println("WARNING sequence complete");
-    }
-  } else if (buzzerMode == SUCCESS) {
-    if (buzzerStep == 0) {
-      buzzerState = false;
-      noTone(BUZZER_PIN);
-      buzzerStep++;
-    } else {
-      stopBuzzer();
-      Serial.println("SUCCESS sequence complete");
-    }
-  } else if (buzzerMode == STARTUP) {
-    if (buzzerStep < 4) { // 4 steps: 2 beeps (on-off-on-off)
-      buzzerState = !buzzerState;
-      if (buzzerState) {
-        tone(BUZZER_PIN, currentFrequency); // Use stored frequency
-      } else {
-        noTone(BUZZER_PIN);
-      }
-      buzzerStep++;
-    } else {
-      stopBuzzer();
-      Serial.println("STARTUP sequence complete");
-    }
-  }
-}
-
-float ControlManager::readTemperature() {
-  int raw = analogRead(TEMP_SENSOR_PIN);      // Read ADC (0-1023)
-  float voltage = (raw / 1023.0) * 1.0;      // Convert to voltage (0-1 V)
-  float temperatureC = voltage * 100.0;      // LM35: 10 mV/°C, max 100°C
-  return temperatureC;
-}
-
-void ControlManager::sendTemperatureToInflux() {
-  if (influxDB == nullptr) {
-    Serial.println("InfluxDB not initialized, cannot send temperature");
-    return;
-  }
-  float temperature = readTemperature();
-  char fields[32];
-  snprintf(fields, sizeof(fields), "temperature=%.2f", temperature);
-  influxDB->sendData("temperature", fields);
-  Serial.println("Sent temperature to InfluxDB: " + String(temperature) + " °C");
-}
-
-void ControlManager::startTemperatureReporting() {
-  if (influxDB == nullptr) {
-    Serial.println("Cannot start temperature reporting: InfluxDB not initialized");
-    return;
-  }
-  temperatureTicker.attach(60, [this]() { sendTemperatureToInflux(); }); // Send every 60 seconds
-  Serial.println("Started temperature reporting every 60 seconds");
-}
-
-void ControlManager::stopTemperatureReporting() {
-  temperatureTicker.detach();
-  Serial.println("Stopped temperature reporting");
 }
 
 void ControlManager::playErrorSound(int frequency) {
@@ -199,4 +64,98 @@ void ControlManager::playSuccessSound(int frequency) {
 
 void ControlManager::playStartupTone(int frequency) {
   startBuzzer(STARTUP, frequency);
+}
+
+void ControlManager::startBuzzer(BuzzerMode mode, int frequency) {
+  buzzerMode = mode;
+  currentFrequency = frequency;
+  buzzerStep = 0;
+  buzzerState = false;
+  buzzerTicker.detach();
+  buzzerTicker.attach_ms(100, [this]() { buzzerCallback(); });
+}
+
+void ControlManager::buzzerCallback() {
+  switch (buzzerMode) {
+    case ERROR:
+      if (buzzerStep < 6) {
+        buzzerState = !buzzerState;
+        digitalWrite(BUZZER_PIN, buzzerState ? HIGH : LOW);
+        buzzerStep++;
+      } else {
+        stopBuzzer();
+      }
+      break;
+    case WARNING:
+      if (buzzerStep < 4) {
+        buzzerState = !buzzerState;
+        digitalWrite(BUZZER_PIN, buzzerState ? HIGH : LOW);
+        buzzerStep++;
+      } else {
+        stopBuzzer();
+      }
+      break;
+    case SUCCESS:
+      if (buzzerStep < 2) {
+        buzzerState = !buzzerState;
+        digitalWrite(BUZZER_PIN, buzzerState ? HIGH : LOW);
+        buzzerStep++;
+      } else {
+        stopBuzzer();
+      }
+      break;
+    case STARTUP:
+      if (buzzerStep < 8) {
+        buzzerState = !buzzerState;
+        digitalWrite(BUZZER_PIN, buzzerState ? HIGH : LOW);
+        buzzerStep++;
+      } else {
+        stopBuzzer();
+      }
+      break;
+    default:
+      stopBuzzer();
+      break;
+  }
+}
+
+void ControlManager::stopBuzzer() {
+  buzzerMode = IDLE;
+  buzzerState = false;
+  digitalWrite(BUZZER_PIN, LOW);
+  buzzerTicker.detach();
+}
+
+void ControlManager::buzzerLoop() {
+  // Handled by Ticker
+}
+
+float ControlManager::readTemperature() {
+  int raw = analogRead(TEMP_SENSOR_PIN);
+  float voltage = raw * (3.3 / 1023.0);
+  float temperature = (voltage - 0.5) * 100; // Example conversion for TMP36
+  return temperature;
+}
+
+void ControlManager::startTemperatureReporting() {
+  temperatureTicker.attach(60, [this]() { sendTemperatureToInflux(); });
+}
+
+void ControlManager::stopTemperatureReporting() {
+  temperatureTicker.detach();
+}
+
+void ControlManager::sendTemperatureToInflux() {
+  if (influxDB) {
+    float temperature = readTemperature();
+    char fields[32];
+    snprintf(fields, sizeof(fields), "temperature=%.2f", temperature);
+    influxDB->sendData("temperature", fields);
+  }
+}
+
+void ControlManager::shift74HC595(uint8_t binaryData) {
+  digitalWrite(CS_MAX, LOW); // Latch low to prepare for shifting
+  shiftOut(DIN_MAX, CLK_MAX, MSBFIRST, binaryData); // Shift out 8-bit binary data
+  digitalWrite(CS_MAX, HIGH); // Latch high to output data
 }
