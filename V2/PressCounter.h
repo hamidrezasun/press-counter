@@ -1,36 +1,38 @@
+// PressCounter - counts press cycles from the opto-isolated 230 V sense input.
+// The PC817 output is LOW while the sensed voltage is present; one LOW period >= minPulseDuration = one press.
 #ifndef PRESS_COUNTER_H
 #define PRESS_COUNTER_H
 
 #include <Arduino.h>
-#include "InfluxDB.h"
 #include "ConfigManager.h"
 #include "ControlManager.h"
+#include "InfluxDB.h"
 
 class PressCounter {
 public:
-  PressCounter(uint8_t pin, InfluxDB& influx, ConfigManager& cfg, ControlManager& ctrl);
+  PressCounter(InfluxDB& influx, ConfigManager& cfg, ControlManager& ctrl);
+
   void begin();
-  void handle();
-  void reset();
-  unsigned long getCount() const;
-  unsigned long getLastPulseDuration() const;
-  unsigned long getLastPulseTime() const;
-  bool getInPulseTrain() const;
-  unsigned long getPulseTrainStart() const;
+  void handle();                       // call every loop()
+  void reset();                        // new session: counter back to zero
   void updateMinPulseDuration();
 
+  unsigned long getCount() const { return _count; }
+  unsigned long getLastPulseDuration() const { return _lastDuration; }
+  unsigned long getLastPulseTime() const { return _lastPulseTime; }      // millis() of the last counted press end, 0 = none
+  bool getInPulseTrain() const { return _lastPulseTime && millis() - _lastPulseTime <= PRESS_TRAIN_GAP_MS; }
+
 private:
-  uint8_t counterPin;
-  InfluxDB& influxDB;
-  ConfigManager& configManager;
-  ControlManager& controlManager;
-  unsigned long pulseStart;
-  unsigned long lastPulseDuration;
-  unsigned long lastPulseTime;
-  unsigned int pulseCount;
-  bool inPulseTrain;
-  unsigned long pulseTrainStart;
-  unsigned long minPulseDuration;
+  InfluxDB&       _influx;
+  ConfigManager&  _config;
+  ControlManager& _ctrl;
+
+  bool _active = false;                // opto currently LOW (after debounce)
+  bool _lastRaw = false;
+  unsigned long _rawChanged = 0;
+  unsigned long _activeSince = 0;
+  unsigned long _minPulse = 10;
+  unsigned long _count = 0, _lastDuration = 0, _lastPulseTime = 0;
 };
 
 #endif

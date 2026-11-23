@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Press counter</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--fg:#1d2330;--mut:#6b7385;--line:#dfe3ea;--acc:#1f6feb;--ok:#1a7f37;--warn:#b7791f;--err:#c62828}
+@media(prefers-color-scheme:dark){:root{--bg:#10141b;--card:#181e28;--fg:#e6e9ef;--mut:#8f98ab;--line:#2a3342;--acc:#5b9dff;--ok:#3fb950;--warn:#d9a441;--err:#ff6b6b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--line)}
+header h1{font-size:17px;margin:0;flex:1 1 auto}
+.pill{font-size:12px;padding:2px 9px;border-radius:99px;border:1px solid var(--line);color:var(--mut)}
+.pill.ok{color:var(--ok);border-color:var(--ok)}.pill.bad{color:var(--err);border-color:var(--err)}.pill.warn{color:var(--warn);border-color:var(--warn)}
+nav{display:flex;gap:4px;padding:8px 12px 0;overflow-x:auto}
+nav button{border:0;background:none;color:var(--mut);padding:8px 14px;border-bottom:2px solid transparent;font:inherit;cursor:pointer}
+nav button.on{color:var(--fg);border-color:var(--acc)}
+main{max-width:980px;margin:0 auto;padding:12px 16px 40px}
+section{display:none}section.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin:0 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kv small{display:block;color:var(--mut);font-size:12px}.kv b{font-size:22px;font-weight:600}.kv b.s{font-size:16px}
+.big{font-size:44px!important;font-variant-numeric:tabular-nums}
+.banner{padding:10px 14px;border-radius:8px;margin:12px 0;display:none;font-weight:600}
+.banner.err{display:block;background:rgba(198,40,40,.12);color:var(--err)}.banner.warn{display:block;background:rgba(183,121,31,.14);color:var(--warn)}
+button.b,a.b{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);padding:7px 14px;border-radius:7px;cursor:pointer}
+button.b.p{background:var(--acc);border-color:var(--acc);color:#fff}button.b.d{color:var(--err);border-color:var(--err)}
+button.b:disabled{opacity:.45;cursor:default}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+label{display:block;font-size:12px;color:var(--mut);margin:10px 0 3px}
+input,select{width:100%;font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--fg)}
+.f2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 14px}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}th{color:var(--mut);font-weight:500;font-size:12px}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;max-height:420px;font-size:12px}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:8px 0}.bar i{display:block;height:100%;background:var(--acc);width:0}
+.note{font-size:12px;color:var(--mut);margin-top:6px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--mut);margin-right:6px}.dot.on{background:var(--ok)}.dot.off{background:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Press counter</h1>
+  <span class="pill" id="pLink">counter</span><span class="pill" id="pWifi">WiFi</span><span class="pill" id="pSrv">server</span>
+</header>
+<nav id="tabs">
+  <button data-t="status" class="on">Status</button><button data-t="settings">Settings</button><button data-t="update">Update</button><button data-t="log">Log</button>
+</nav>
+<main>
+<div id="banner" class="banner"></div>
+
+<section id="status" class="on">
+  <div class="card"><div class="grid">
+    <div class="kv"><small>Strokes (session / total)</small><b class="big" id="count">-</b><small id="life"></small></div>
+    <div class="kv"><small>Machine</small><b id="relay">-</b><div class="row" style="margin-top:6px"><button class="b p" id="bOn">Switch on</button><button class="b d" id="bOff">Stop</button></div></div>
+    <div class="kv"><small>Last stroke</small><b id="last">-</b><small id="lastAgo"></small></div>
+    <div class="kv"><small>Temperature</small><b id="temp">-</b><small id="mcuT"></small></div>
+  </div></div>
+  <div class="card"><h2>Operator</h2><div class="grid">
+    <div class="kv"><small>Person</small><b class="s" id="op">-</b></div>
+    <div class="kv"><small>Die</small><b class="s" id="die">-</b></div>
+    <div class="kv"><small>Session</small><b class="s" id="sess">-</b></div>
+    <div class="kv"><small>Calls</small><b class="s" id="calls">-</b><div class="row" style="margin-top:6px"><button class="b" id="bAck">Acknowledge</button><button class="b" data-cmd="call:1">Call supervisor</button><button class="b" data-cmd="call:2">Call net / maint.</button></div></div>
+  </div></div>
+  <div class="card"><h2>Voltage inputs</h2><div class="grid"><div class="kv"><small>12 V input</small><b id="v12">-</b></div><div class="kv"><small>230 V input (ZMPT101B)</small><b id="v230">-</b></div></div><div class="note">Published on MQTT as <code>sensor/voltage</code> every 5 s. Calibrate with the settings Voltage calibration.</div></div>
+  <div class="card"><h2>Output relays K2-K5 (COM / NO / NC, 2.5 A)</h2><div class="grid" id="outs"></div>
+  <div class="note">Manual outputs can be switched here, from MQTT (<code>out_on</code> / <code>out_off</code>) or the USB console; the mode of each output is set under Settings. Switching ON needs "Allow remote start", switching off is always possible. At most 4 outputs are on at once.</div></div>
+  <div class="card"><h2>Panel (same as the LEDs and buttons on the front)</h2><div class="row">
+    <span><i class="dot" id="ledRun"></i>RUN (machine enabled)</span><span><i class="dot" id="ledAlert"></i>ALERT (error / call)</span>
+  </div><div class="note">Every function of the panel buttons and the display is on this page: machine on / off, calls, acknowledge, reset counter, card writing, settings, update, network and error information. The display is optional (Settings -> Display module).</div></div>
+  <div class="card"><h2>Actions</h2><div class="row">
+    <button class="b" data-cmd="buzz:success">Beep ok</button><button class="b" data-cmd="buzz:warning">Beep warning</button><button class="b" data-cmd="buzz:error">Beep error</button>
+    <button class="b" data-cmd="clr:">Clear errors</button><button class="b d" data-cmd="reset:" data-confirm="Reset the session counter?">Reset counter</button><button class="b d" data-cmd="reboot:" data-confirm="Restart the counter (the machine is switched off)?">Restart counter</button>
+  </div>
+  <label>Write text to the next card (e.g. personnel:1234 or die:A12)</label>
+  <div class="row"><input id="tag" maxlength="40" style="flex:1 1 220px;width:auto"><button class="b" id="bTag">Write card</button></div>
+  <div class="note" id="tagLast"></div></div>
+</section>
+
+
+<section id="settings">
+  <div class="card"><h2>Machine (stored in the counter)</h2><div class="f2" id="stmFields"></div></div>
+  <div class="card"><h2>MQTT broker (the only data backend)</h2><div class="f2">
+    <div><label>MQTT host</label><input id="g_mqttHost" placeholder="192.168.1.10"></div>
+    <div><label>MQTT port</label><input id="g_mqttPort" type="number"></div>
+    <div><label>Topic prefix</label><input id="g_mqttTopic" placeholder="press"></div>
+    <div><label>Client id</label><input id="g_mqttClient"></div>
+    <div><label>User</label><input id="g_mqttUser"></div>
+    <div><label>Password <span id="mqPass"></span></label><input id="g_mqttPass" type="password" placeholder="leave empty to keep"></div>
+    <div><label>NTP server</label><input id="g_ntpHost"></div>
+  </div><div class="note">Topics: <code>&lt;prefix&gt;/&lt;device&gt;/status</code>, <code>sensor/voltage</code>, <code>event/&lt;kind&gt;</code>, <code>relay/&lt;1..5&gt;/state</code> and <code>relay/&lt;1..5&gt;/set</code> (ON / OFF / TOGGLE), <code>cmd</code>. Relay 1 = K1 (machine), 2..5 = OUT1..OUT4.</div></div>
+  <div class="card"><h2>WiFi</h2>
+    <div class="f2"><div><label>Network (SSID)</label><input id="w_ssid" list="ssids"><datalist id="ssids"></datalist></div><div><label>Password (8+ characters)</label><input id="w_pass" type="password"></div></div>
+    <div class="row" style="margin-top:10px"><button class="b" id="bScan">Scan</button><button class="b" id="bWifi">Connect</button></div>
+    <div class="note" id="wifiNote"></div></div>
+  <div class="card"><h2>Security</h2><div class="f2">
+    <div><label>Admin password <span id="admPass"></span> (user name: admin)</label><input id="g_adminPass" type="password" placeholder="leave empty to keep"></div>
+    <div><label>Wireless update (OTA) password <span id="otaPass"></span></label><input id="g_otaPass" type="password" placeholder="leave empty to keep"></div>
+  </div><div class="note">Without an admin password everybody on the network can switch the machine and change settings.</div></div>
+  <div class="row"><button class="b p" id="bSave">Save settings</button><span class="note" id="saveNote"></span></div>
+</section>
+
+<section id="update">
+  <div class="card"><h2>Firmware</h2><div class="grid">
+    <div class="kv"><small>Gateway (WiFi chip)</small><b class="s" id="vEsp">-</b><small id="vEspN"></small></div>
+    <div class="kv"><small>Counter (STM32)</small><b class="s" id="vStm">-</b><small id="vStmN"></small></div>
+  </div>
+  <div class="bar"><i id="upBar"></i></div><div id="upMsg" class="note"></div>
+  <div class="row" style="margin-top:10px"><button class="b" id="bCheck">Check now</button><button class="b p" id="bInstall">Install updates</button><button class="b" id="bRetry">Re-flash counter</button></div>
+  <div class="f2" style="margin-top:6px">
+    <div><label>Update server (folder that holds manifest.json)</label><input id="g_updateUrl" placeholder="http://192.168.1.10:8080/fw"></div>
+    <div><label>Access token <span id="updTok"></span></label><input id="g_updateToken" type="password" placeholder="leave empty to keep"></div>
+    <div><label>Install automatically</label><select id="g_autoUpdate"><option value="0">No - only when I press the button</option><option value="1">Yes (counter only while the machine is idle)</option></select></div>
+    <div><label>Check every (minutes)</label><input id="g_checkMinutes" type="number" min="5"></div>
+  </div><div class="note">Press "Save settings" on the Settings page after changing these. The counter is only flashed while the machine is switched off.</div></div>
+  <div class="card"><h2>Device</h2><div id="devInfo" class="note"></div><div class="row" style="margin-top:8px"><button class="b d" id="bRestart">Restart gateway</button></div></div>
+</section>
+
+<section id="log"><div class="card"><h2>Gateway log</h2><pre id="logText">-</pre></div></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const ERR=["","RFID reader","Temperature sensor","Press sense stuck","Over temperature","Gateway link","No server","Queue full","Settings","Watchdog","Stroke while locked","Update failed","Tag write"];
+const STM=[["name","Device name","text"],["minpulse","Minimum stroke signal (ms)","number"],["idle","Switch off after idle (min, 0 = never)","number"],["stuck","Sense stuck alarm (s)","number"],["tempoff","Temperature offset (0.1 degC)","number"],["overtemp","Over-temperature limit (0.1 degC)","number"],["manual","Menu may switch machine on/off without a card","sel",[["0","No"],["1","Yes"]]],["remote","Allow remote start (web / MQTT)","sel",[["0","No - stop only"],["1","Yes"]]],["sound","Buzzer","sel",[["0","Off"],["1","Errors only"],["2","All sounds"]]],["out1","Output 1 (K2) mode","sel",[["0","Manual (web / MQTT / console)"],["1","Follows the machine relay"],["2","On while an error or call is active"],["3","On while the supervisor call is active"],["4","On while the net / maintenance call is active"],["5","On while the press sense input is active"]]],["out2","Output 2 (K3) mode","sel",[["0","Manual (web / MQTT / console)"],["1","Follows the machine relay"],["2","On while an error or call is active"],["3","On while the supervisor call is active"],["4","On while the net / maintenance call is active"],["5","On while the press sense input is active"]]],["out3","Output 3 (K4) mode","sel",[["0","Manual (web / MQTT / console)"],["1","Follows the machine relay"],["2","On while an error or call is active"],["3","On while the supervisor call is active"],["4","On while the net / maintenance call is active"],["5","On while the press sense input is active"]]],["out4","Output 4 (K5) mode","sel",[["0","Manual (web / MQTT / console)"],["1","Follows the machine relay"],["2","On while an error or call is active"],["3","On while the supervisor call is active"],["4","On while the net / maintenance call is active"],["5","On while the press sense input is active"]]],["v12cal","12 V input calibration (permille, 1000 = nominal)","number"],["accal","230 V input calibration (permille; also adjust the module trimmer)","number"],["display","Display module (fitted on the panel)","sel",[["1","Yes - use the display"],["0","No - run without display"]]],["bright","Display brightness (%)","number"]];
+let S=null,loadedSettings=false,tab="status";
+const esc=s=>String(s==null?"":s);
+function pill(id,txt,cls){const e=$(id);e.textContent=txt;e.className="pill "+cls}
+async function api(path,opt){const r=await fetch(path,opt);if(!r.ok)throw new Error(await r.text()||r.status);return r}
+async function post(path,body){const o={method:"POST"};if(body){if(typeof body==="string"){o.headers={"Content-Type":"application/json"};o.body=body}else{o.headers={"Content-Type":"application/x-www-form-urlencoded"};o.body=new URLSearchParams(body)}}return api(path,o)}
+function fmtDur(s){s=+s|0;const h=s/3600|0,m=s%3600/60|0;return h?h+" h "+m+" min":m+" min "+(s%60)+" s"}
+function ago(s){return s<0?"no stroke yet":s<90?s+" s ago":fmtDur(s)+" ago"}
+function render(){
+  const m=S.stm,n=S.net;
+  $("title").textContent=(S.device||"Press counter")+"  v"+S.version;
+  pill("pLink",m.alive?"counter":"counter offline",m.alive?"ok":"bad");
+  pill("pWifi",n.wifi?"WiFi "+n.rssi+" dBm":(n.ap?"setup network":"no WiFi"),n.wifi?"ok":"bad");
+  pill("pSrv",n.server?"MQTT ok":(n.mqttConfigured?"MQTT down":"MQTT not set"),n.server?"ok":(n.mqttConfigured?"bad":"warn"));
+
+  const b=$("banner");b.className="banner";b.textContent="";
+  if(!m.alive){b.className="banner err";b.textContent="The counter does not answer on the serial link."}
+  else if(m.errMask){const t=[];for(let i=1;i<ERR.length;i++)if(m.errMask>>i&1)t.push("E"+String(i).padStart(2,"0")+" "+ERR[i]);b.className="banner "+(m.err&&[1,2,3,4,10].includes(m.err)?"err":"warn");b.textContent=t.join("  |  ")}
+  $("count").textContent=m.count??"-";$("life").textContent=m.lifetime!=null?"total "+m.lifetime:"";
+  $("relay").textContent=m.alive?(m.relay?"ON":"off"):"-";$("relay").style.color=m.relay?"var(--ok)":"";
+  $("bOn").disabled=!m.alive||!!m.relay;$("bOff").disabled=!m.alive||!m.relay;
+  $("last").textContent=m.lastDurMs!=null?m.lastDurMs+" ms":"-";$("lastAgo").textContent=m.lastAgoS!=null?(m.inPress?"stroke running":ago(m.lastAgoS)):"";
+  $("temp").textContent=m.tempC!=null?m.tempC.toFixed(1)+" °C":"-";$("mcuT").textContent=m.mcuTempC!=null?"chip "+m.mcuTempC.toFixed(0)+" °C":"";
+  $("tagLast").textContent=S.tag?"Last card: "+S.tag:"";$("op").textContent=m.operator||"-";$("die").textContent=m.die||"-";$("sess").textContent=m.sessionSec?fmtDur(m.sessionSec):"-";$("calls").textContent=m.calls?((m.calls&2?"supervisor ":"")+(m.calls&4?"net":"")):"none";
+  $("bAck").disabled=!m.calls;
+  $("v12").textContent=m.v12!=null?m.v12.toFixed(2)+" V":"-";$("v230").textContent=m.v230!=null?(m.v230>0?m.v230.toFixed(1)+" V":"no signal"):"-";
+  for(let i=1;i<=4;i++){const on=(m.outs>>(i-1))&1;$("oc"+i).className="dot"+(on?" on":"");$("ob"+i).textContent=on?"Switch off":"Switch on";$("ob"+i).disabled=!m.alive}
+  $("ledRun").className="dot"+(m.relay?" on":"");$("ledAlert").className="dot"+(m.errMask||m.calls?" off":"");
+  const u=S.update;$("vEsp").textContent=S.version;$("vEspN").textContent=u.espNew?"new: "+u.espLatest:(u.espLatest?"up to date":"");
+  $("vStm").textContent=m.ver||"-";$("vStmN").textContent=u.stmNew?"new: "+u.stmLatest:(u.stmLatest?"up to date":"");
+  $("upBar").style.width=(u.phase>=1&&u.phase<=3?u.pct:u.phase===5?100:0)+"%";$("upMsg").textContent=u.msg||(u.configured?"":"No update server set.");
+  $("bCheck").disabled=$("bInstall").disabled=$("bRetry").disabled=u.busy;
+  $("devInfo").textContent="IP "+n.ip+"  MAC "+n.mac+"  SSID "+n.ssid+"  uptime "+fmtDur(S.uptime)+"  free heap "+S.heap+" B  events "+m.events+" (bad frames "+m.badFrames+") ";
+}
+async function poll(){try{S=await (await api("/api/state")).json();render();if(tab==="log")log()}catch(e){pill("pLink","gateway offline","bad")}setTimeout(poll,2000)}
+async function log(){try{$("logText").textContent=await (await api("/api/log")).text()||"-"}catch(e){}}
+function buildStm(){const h=$("stmFields");h.textContent="";STM.forEach(([k,l,t,o])=>{const d=document.createElement("div"),lb=document.createElement("label");lb.textContent=l;d.appendChild(lb);let e;if(t==="sel"){e=document.createElement("select");o.forEach(([v,n])=>{const op=document.createElement("option");op.value=v;op.textContent=n;e.appendChild(op)})}else{e=document.createElement("input");e.type=t}e.id="s_"+k;d.appendChild(e);h.appendChild(d)})}
+async function loadSettings(){try{const d=await (await api("/api/settings")).json();const g=d.gateway;
+  for(const k in g){const e=$("g_"+k);if(e&&!/Set$/.test(k)&&!/(Token|Pass)$/.test(k))e.value=g[k]}
+  const mark=(id,b)=>$(id).textContent=b?"(set)":"(not set)";mark("mqPass",g.mqttPassSet);mark("updTok",g.updateTokenSet);mark("admPass",g.adminPassSet);mark("otaPass",g.otaPassSet);
+  $("w_ssid").value=g.wifiSsid||"";for(const k in d.stm){const e=$("s_"+k);if(e)e.value=d.stm[k]}loadedSettings=true}catch(e){$("saveNote").textContent=e.message}}
+async function save(){const g={},m={};["device","mqttHost","mqttPort","mqttTopic","mqttClient","mqttUser","mqttPass","updateUrl","updateToken","autoUpdate","checkMinutes","ntpHost","adminPass","otaPass"].forEach(k=>{const e=$("g_"+k);if(e)g[k]=/Port|autoUpdate|checkMinutes/.test(k)?+e.value:e.value});
+  STM.forEach(([k])=>{const e=$("s_"+k);if(e&&e.value!=="")m[k]=e.value});
+  try{await post("/api/settings",JSON.stringify({gateway:g,stm:m}));$("saveNote").textContent="Saved.";["g_mqttPass","g_updateToken","g_adminPass","g_otaPass"].forEach(i=>$(i).value="");setTimeout(loadSettings,1200)}catch(e){$("saveNote").textContent="Error: "+e.message}}
+document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x===b));document.querySelectorAll("section").forEach(s=>s.classList.toggle("on",s.id===tab));if(tab==="settings"&&!loadedSettings)loadSettings();if(tab==="log")log()});
+document.querySelectorAll("[data-cmd]").forEach(b=>b.onclick=async()=>{if(b.dataset.confirm&&!confirm(b.dataset.confirm))return;const[c,a]=b.dataset.cmd.split(":");try{await post("/api/cmd",{cmd:c,arg:a})}catch(e){alert(e.message)}});
+$("bOn").onclick=()=>post("/api/cmd",{cmd:"relay",arg:"1"}).catch(e=>alert(e.message));
+$("bOff").onclick=()=>post("/api/cmd",{cmd:"relay",arg:"0"}).catch(e=>alert(e.message));
+$("bAck").onclick=()=>post("/api/cmd",{cmd:"ack",arg:"all"}).catch(e=>alert(e.message));
+$("bTag").onclick=async()=>{const t=$("tag").value.trim();if(!t)return;try{await post("/write_tag",{tagText:t});$("tagLast").textContent="Hold the card on the reader within 30 s."}catch(e){alert(e.message)}};
+$("bSave").onclick=save;
+$("bScan").onclick=async()=>{$("wifiNote").textContent="Scanning...";try{const l=await (await api("/api/scan")).json();const d=$("ssids");d.textContent="";l.forEach(x=>{const o=document.createElement("option");o.value=x.ssid;o.label=x.rssi+" dBm"+(x.open?" (open)":"");d.appendChild(o)});$("wifiNote").textContent=l.length+" networks found."}catch(e){$("wifiNote").textContent=e.message}};
+$("bWifi").onclick=async()=>{try{await post("/api/wifi",{ssid:$("w_ssid").value,pass:$("w_pass").value});$("wifiNote").textContent="Saved. The gateway is connecting - if the address changes, look at the counter display."}catch(e){$("wifiNote").textContent=e.message}};
+$("bCheck").onclick=()=>post("/api/update",{action:"check"}).catch(e=>alert(e.message));
+$("bInstall").onclick=()=>{if(confirm("Install the new firmware? The counter is only updated while the machine is off."))post("/api/update",{action:"install"}).catch(e=>alert(e.message))};
+$("bRetry").onclick=()=>{if(confirm("Flash the stored counter image again?"))post("/api/update",{action:"retry"}).catch(e=>alert(e.message))};
+$("bRestart").onclick=()=>{if(confirm("Restart the WiFi gateway?"))post("/api/restart").catch(e=>alert(e.message))};
+(function(){const g=$("outs");for(let i=1;i<=4;i++){const d=document.createElement("div");d.className="kv";d.innerHTML='<small>OUT'+i+' (K'+(i+1)+', MQTT relay '+(i+1)+')</small><b class="s"><i class="dot" id="oc'+i+'"></i><span id="ot'+i+'"></span></b><div class="row" style="margin-top:6px"><button class="b" id="ob'+i+'">Switch on</button></div>';g.appendChild(d);$("ob"+i).onclick=()=>post("/api/cmd",{cmd:"out",arg:i+":2"}).catch(e=>alert(e.message))}})();
+buildStm();poll();
+</script>
+</body>
+</html>

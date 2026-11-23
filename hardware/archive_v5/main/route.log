@@ -1,0 +1,22 @@
+  stub via (92.1,63.2) -> C8: OK
+  stub via (92.1,67.2) -> C11: OK
+  stub via (103.9,63.2) -> C9: OK
+  stub via (100.8,71.9) -> C10: OK
+  stub via (94.5,59.9) -> C8: OK
+mains nets routed with the own router, failed: []; 133 creepage keep-outs
+low-voltage pads inside a creepage keep-out: [('K1', '+5V', 38.0, 79.0), ('K1', 'RLY_N', 38.0, 91.0), ('K2', '+5V', 157.9, 22.5), ('K2', 'OUT1_N', 157.9, 10.5), ('K3', '+5V', 157.9, 44.5), ('K3', 'OUT2_N', 157.9, 32.5), ('K4', '+5V', 157.9, 66.5), ('K4', 'OUT3_N', 157.9, 54.5), ('K5', '+5V', 157.9, 88.5), ('K5', 'OUT4_N', 157.9, 76.5)]
+freerouting finished in 2036s rc=0
+    - J10-3  ->  K2-4
+  Net 'OUT3_COM' (1 unrouted connection):
+    - J12-2  ->  K4-1
+  Net 'OUT3_NO' (1 unrouted connection):
+    - J12-1  ->  K4-3
+  Net 'OUT3_NC' (1 unrouted connection):
+    - K4-4  ->  J12-3
+2026-10-11 14:09:48.546 INFO   [2F22C8\1CB769] Auto-routing stage completed: started with 300 unrouted nets, completed in 2026.34 seconds, final score: 616.52 (67 unrouted and 946 violations), using 1934.70 total CPU seconds, 817.14 GB total allocated, and 540.5 MB peak heap usage.
+2026-10-11 14:09:49.147 INFO   [2F22C8\1CB769] Skipping optimization stage: the board has 67 unrouted connection(s) (optimizer only runs on completely routed boards).
+2026-10-11 14:09:49.274 INFO   [2F22C8\1CB769] Job '2F22C8\1CB769' finished with state: COMPLETED (elapsed: 33 minutes 48.59 seconds, finished at UTC: 2026-10-11T10:39:49.272511800Z).
+2026-10-11 14:09:49.304 INFO   Saving output file 'D:\Nextcloud2\project\press counter\hardware\main\fr\out.ses' (SES)...
+2026-10-11 14:09:49.516 INFO   Successfully saved output file 'D:\Nextcloud2\project\press counter\hardware\main\fr\out.ses' (109913 bytes).
+SES import True
+tracks 1602 vias 165 -> D:\Nextcloud2\project\press counter\hardware\main\press_counter_main.kicad_pcb

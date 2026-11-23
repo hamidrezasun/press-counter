@@ -1,248 +1,185 @@
 #include "WebServerManager.h"
-#include <FS.h>
-#include <ESP8266WiFi.h>
+#include <ArduinoJson.h>
+#include <time.h>
 
-WebServerManager::WebServerManager(ESP8266WebServer& srv, ConfigManager& cfg, ControlManager& ctrl, NfcManager& nfc, PressCounter& pc)
-  : server(srv), configManager(cfg), controlManager(ctrl), nfcManager(nfc), pressCounter(pc), lastTagData("No tag read") {
+static const size_t MAX_UPLOAD_BYTES = 200UL * 1024UL;     // index.html size limit (SPIFFS)
+
+WebServerManager::WebServerManager(ESP8266WebServer& srv, ConfigManager& cfg, ControlManager& ctrl,
+                                   NfcManager& nfc, PressCounter& pc)
+  : _srv(srv), _config(cfg), _ctrl(ctrl), _nfc(nfc), _press(pc) {}
+
+// The analyzer dashboard is served from another origin (port 8000) and calls this API: allow it.
+static void cors(ESP8266WebServer& s) {
+  s.sendHeader("Access-Control-Allow-Origin", "*");
+  s.sendHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  s.sendHeader("Access-Control-Allow-Headers", "*");
 }
 
-void WebServerManager::setupRoutes() {
-  server.on("/", HTTP_GET, std::bind(&WebServerManager::handleRoot, this));
-  server.on(
-    "/upload",
-    HTTP_POST,
-    [this]() {
-      server.send(200, "text/plain", "Upload complete");
-    },
-    [this]() {
-      handleUploadHtml();
-    }
-  );
-  server.on("/save", HTTP_GET, std::bind(&WebServerManager::handleGetSettings, this));
-  server.on("/save", HTTP_POST, std::bind(&WebServerManager::handleSaveSettings, this));
-  server.on("/relay", HTTP_POST, std::bind(&WebServerManager::handleRelayToggle, this));
-  server.on("/buzzer_error", HTTP_POST, std::bind(&WebServerManager::handleBuzzerError, this));
-  server.on("/buzzer_warning", HTTP_POST, std::bind(&WebServerManager::handleBuzzerWarning, this));
-  server.on("/buzzer_success", HTTP_POST, std::bind(&WebServerManager::handleBuzzerSuccess, this));
-  server.on("/write_tag", HTTP_POST, std::bind(&WebServerManager::handleWriteTag, this));
-  server.on("/status", HTTP_GET, std::bind(&WebServerManager::handleStatus, this));
-  server.on("/status/file", HTTP_GET, std::bind(&WebServerManager::handleFileStatus, this));
-  server.on("/press_counter", HTTP_GET, std::bind(&WebServerManager::handlePressCounterStatus, this));
+void WebServerManager::sendText(int code, const char* text) {
+  cors(_srv);
+  _srv.send(code, "text/plain", text);
 }
 
-void WebServerManager::handlePressCounterStatus() {
-  String json = "{";
-  json += "\"count\":" + String(pressCounter.getCount()) + ",";
-  json += "\"lastPulseDuration\":" + String(pressCounter.getLastPulseDuration()) + ",";
-  json += "\"lastPulseTime\":" + String(pressCounter.getLastPulseTime()) + ",";
-  json += "\"inPulseTrain\":" + String(pressCounter.getInPulseTrain() ? "true" : "false") + ",";
-  json += "\"pulseTrainStart\":" + String(pressCounter.getPulseTrainStart());
-  json += "}";
-  server.send(200, "application/json", json);
+void WebServerManager::sendJson(const JsonDocument& doc) {
+  String out;
+  serializeJson(doc, out);
+  cors(_srv);
+  _srv.send(200, "application/json", out);
 }
 
-void WebServerManager::handleGetSettings() {
-  Config config = configManager.get();
-  String json = "{";
-  json += "\"device\":\"" + String(config.device) + "\",";
-  json += "\"influxHost\":\"" + String(config.influxHost) + "\",";
-  json += "\"influxPort\":" + String(config.influxPort) + ",";
-  json += "\"influxBucket\":\"" + String(config.influxBucket) + "\",";
-  json += "\"influxOrg\":\"" + String(config.influxOrg) + "\",";
-  json += "\"influxToken\":\"" + String(config.influxToken) + "\",";
-  json += "\"minPulseDuration\":" + String(config.minPulseDuration);
-  json += "}";
-  server.send(200, "application/json", json);
+void WebServerManager::routes() {
+  _srv.on("/", HTTP_GET, [this]() { handleRoot(); });
+  _srv.on("/upload", HTTP_POST, [this]() { sendText(200, "Upload complete"); }, [this]() { handleUpload(); });
+  _srv.on("/save", HTTP_GET, [this]() { handleGetSettings(); });
+  _srv.on("/save", HTTP_POST, [this]() { handleSaveSettings(); });
+  _srv.on("/status", HTTP_GET, [this]() { handleStatus(); });
+  _srv.on("/press_counter", HTTP_GET, [this]() { handlePressCounter(); });
+  _srv.on("/write_tag", HTTP_POST, [this]() { handleWriteTag(); });
+  _srv.on("/status/file", HTTP_GET, [this]() {
+    StaticJsonDocument<48> d;
+    d["fileExists"] = SPIFFS.exists("/index.html");
+    sendJson(d);
+  });
+  _srv.on("/relay", HTTP_POST, [this]() {
+    _ctrl.toggleRelay("web");
+    sendText(200, _ctrl.relayOn() ? "Relay on" : "Relay off");
+  });
+  _srv.on("/buzzer_error",   HTTP_POST, [this]() { _ctrl.playErrorSound();   sendText(200, "ok"); });
+  _srv.on("/buzzer_warning", HTTP_POST, [this]() { _ctrl.playWarningSound(); sendText(200, "ok"); });
+  _srv.on("/buzzer_success", HTTP_POST, [this]() { _ctrl.playSuccessSound(); sendText(200, "ok"); });
+  _srv.onNotFound([this]() {
+    if (_srv.method() == HTTP_OPTIONS) { cors(_srv); _srv.send(204); }      // CORS pre-flight
+    else sendText(404, "Not found");
+  });
 }
 
 void WebServerManager::handleRoot() {
   if (SPIFFS.exists("/index.html")) {
-    File file = SPIFFS.open("/index.html", "r");
-    if (!file) {
-      Serial.println("Failed to open index.html for reading");
-      server.send(500, "text/plain", "Failed to open file");
-      return;
-    }
-    server.streamFile(file, "text/html");
-    file.close();
-  } else {
-    Serial.println("index.html not found in SPIFFS");
-    String html = "<!DOCTYPE html><html><head><title>Upload Interface</title>";
-    html += "<style>body{font-family:Arial,sans-serif;padding:20px}.control{margin:10px 0}input,button{padding:8px;margin:5px}</style>";
-    html += "<h2>No Interface Found</h2>";
-    html += "<p>Please upload an index.html file to customize the interface.</p>";
-    html += "<form action='/upload' method='POST' enctype='multipart/form-data'>";
-    html += "<div class='control'><input type='file' name='htmlFile' accept='.html'></div>";
-    html += "<div class='control'><button type='submit'>Upload HTML</button></div>";
-    html += "</form></body></html>";
-    server.send(200, "text/html", html);
+    File f = SPIFFS.open("/index.html", "r");
+    if (f) { _srv.streamFile(f, "text/html"); f.close(); return; }
+  }
+  // no interface uploaded yet: tiny upload form
+  _srv.send(200, "text/html",
+    F("<!DOCTYPE html><meta charset=utf-8><title>Setup</title><body style='font-family:sans-serif;padding:20px'>"
+      "<h2>No interface found</h2><p>Upload <code>index.html</code>:</p>"
+      "<form action='/upload' method='POST' enctype='multipart/form-data'>"
+      "<input type='file' name='htmlFile' accept='.html'><button>Upload</button></form></body>"));
+}
+
+void WebServerManager::handleUpload() {
+  HTTPUpload& up = _srv.upload();
+  if (up.status == UPLOAD_FILE_START) {
+    _uploadBytes = 0;
+    _upload = SPIFFS.open("/index.html", "w");
+  } else if (up.status == UPLOAD_FILE_WRITE) {
+    _uploadBytes += up.currentSize;
+    if (_upload && _uploadBytes > MAX_UPLOAD_BYTES) { _upload.close(); SPIFFS.remove("/index.html"); }
+    if (_upload) _upload.write(up.buf, up.currentSize);
+  } else if (up.status == UPLOAD_FILE_END) {
+    if (_upload) _upload.close();
   }
 }
 
-void WebServerManager::handleUploadHtml() {
-  HTTPUpload& upload = server.upload();
-  if (upload.status == UPLOAD_FILE_START) {
-    Serial.printf("Uploading: %s, Size: %u\n", upload.filename.c_str(), upload.totalSize);
-    if (upload.filename.isEmpty()) {
-      server.send(400, "text/plain", "No file selected");
-      return;
-    }
-    uploadFile = SPIFFS.open("/index.html", "w");
-    if (!uploadFile) {
-      Serial.println("Failed to open file for writing");
-      server.send(500, "text/plain", "Failed to open file");
-      return;
-    }
-  } else if (upload.status == UPLOAD_FILE_WRITE) {
-    if (uploadFile) {
-      uploadFile.write(upload.buf, upload.currentSize);
-    }
-  } else if (upload.status == UPLOAD_FILE_END) {
-    if (uploadFile) {
-      uploadFile.close();
-      Serial.println("File uploaded successfully");
-    }
-  }
+void WebServerManager::handleGetSettings() {
+  const Config& c = _config.get();
+  StaticJsonDocument<512> d;
+  d["device"] = c.device;
+  d["influxHost"] = c.influxHost;
+  d["influxPort"] = c.influxPort;
+  d["influxBucket"] = c.influxBucket;
+  d["influxOrg"] = c.influxOrg;
+  d["influxTokenSet"] = c.influxToken[0] != 0;      // the token itself never leaves the device
+  d["minPulseDuration"] = c.minPulseDuration;
+  sendJson(d);
 }
 
 void WebServerManager::handleSaveSettings() {
-  bool updated = false;
-  Config config = configManager.get();
-  if (server.hasArg("device") && server.arg("device").length() > 0) {
-    strlcpy(config.device, server.arg("device").c_str(), sizeof(config.device));
-    updated = true;
-  }
-  if (server.hasArg("influxHost") && server.arg("influxHost").length() > 0) {
-    strlcpy(config.influxHost, server.arg("influxHost").c_str(), sizeof(config.influxHost));
-    updated = true;
-  }
-  if (server.hasArg("influxPort") && server.arg("influxPort").length() > 0) {
-    config.influxPort = server.arg("influxPort").toInt();
-    updated = true;
-  }
-  if (server.hasArg("influxBucket") && server.arg("influxBucket").length() > 0) {
-    strlcpy(config.influxBucket, server.arg("influxBucket").c_str(), sizeof(config.influxBucket));
-    updated = true;
-  }
-  if (server.hasArg("influxOrg") && server.arg("influxOrg").length() > 0) {
-    strlcpy(config.influxOrg, server.arg("influxOrg").c_str(), sizeof(config.influxOrg));
-    updated = true;
-  }
-  if (server.hasArg("influxToken") && server.arg("influxToken").length() > 0) {
-    strlcpy(config.influxToken, server.arg("influxToken").c_str(), sizeof(config.influxToken));
-    updated = true;
-  }
-  if (server.hasArg("minPulseDuration") && server.arg("minPulseDuration").length() > 0) {
-    config.minPulseDuration = server.arg("minPulseDuration").toInt();
-    updated = true;
-  }
-  if (updated) {
-    configManager.set(config);
-    if (configManager.save()) {
-      Serial.println("Configuration saved successfully");
-      pressCounter.updateMinPulseDuration();
-      server.send(200, "text/plain", "Settings saved");
-    } else {
-      Serial.println("Failed to save configuration");
-      server.send(500, "text/plain", "Failed to save settings");
-    }
-  } else {
-    Serial.println("No valid settings provided to save");
-    server.send(400, "text/plain", "No valid settings provided");
-  }
-}
+  Config c = _config.get();
+  bool changed = false;
 
-void WebServerManager::handleRelayToggle() {
-  controlManager.setRelayState(false, true);
-  server.send(200, "text/plain", "Relay toggled");
-}
+  auto text = [&](const char* arg, char* dst, size_t n) {
+    if (_srv.hasArg(arg) && _srv.arg(arg).length() > 0) { strlcpy(dst, _srv.arg(arg).c_str(), n); changed = true; }
+  };
+  text("device", c.device, sizeof(c.device));
+  text("influxHost", c.influxHost, sizeof(c.influxHost));
+  text("influxBucket", c.influxBucket, sizeof(c.influxBucket));
+  text("influxOrg", c.influxOrg, sizeof(c.influxOrg));
+  text("influxToken", c.influxToken, sizeof(c.influxToken));
+  text("otaPass", c.otaPassword, sizeof(c.otaPassword));
 
-void WebServerManager::handleBuzzerError() {
-  controlManager.playErrorSound();
-  server.send(200, "text/plain", "Error sound played");
-}
-
-void WebServerManager::handleBuzzerWarning() {
-  controlManager.playWarningSound();
-  server.send(200, "text/plain", "Warning sound played");
-}
-
-void WebServerManager::handleBuzzerSuccess() {
-  controlManager.playSuccessSound();
-  server.send(200, "text/plain", "Success sound played");
-}
-
-void WebServerManager::handleWriteTag() {
-  if (server.hasArg("tagText") && server.arg("tagText").length() > 0) {
-    nfcManager.setPendingWrite(server.arg("tagText").c_str());
-    lastTagData = "Waiting for NFC tag...";
-  } else {
-    lastTagData = "No data provided to write";
-    controlManager.playErrorSound();
+  if (_srv.hasArg("influxPort") && _srv.arg("influxPort").length()) {
+    const int port = _srv.arg("influxPort").toInt();
+    if (port < 1 || port > 65535) { sendText(400, "Invalid port"); return; }
+    c.influxPort = port;
+    changed = true;
   }
-  server.send(200, "text/plain", lastTagData);
+  if (_srv.hasArg("minPulseDuration") && _srv.arg("minPulseDuration").length()) {
+    const int ms = _srv.arg("minPulseDuration").toInt();
+    if (ms < 1 || ms > 5000) { sendText(400, "minPulseDuration must be 1..5000 ms"); return; }
+    c.minPulseDuration = ms;
+    changed = true;
+  }
+  if (!changed) { sendText(400, "No valid settings provided"); return; }
+
+  _config.set(c);
+  if (!_config.save()) { sendText(500, "Failed to save settings"); return; }
+  _press.updateMinPulseDuration();
+  if (_srv.hasArg("otaPass") && _srv.arg("otaPass").length()) ArduinoOTA.setPassword(_config.get().otaPassword);
+  sendText(200, "Settings saved");
 }
 
 void WebServerManager::handleStatus() {
-  DeviceStatus status = controlManager.getStatus();
-  String json = "{";
-  json += "\"relayStatus\":\"" + String(status.relayOn ? "On" : "Off") + "\",";
-  json += "\"buzzerStatus\":\"" + String(status.buzzerOn ? "On" : "Off") + "\",";
-  json += "\"buttonStatus\":\"" + String(status.buttonPressed ? "Pressed" : "Released") + "\",";
-  json += "\"tagData\":\"" + String(nfcManager.getLastTagData()) + "\"";
-  json += "}";
-  lastTagData = nfcManager.getLastTagData();
-  server.send(200, "application/json", json);
+  const DeviceStatus s = _ctrl.getStatus();
+  const char* tag = _nfc.getLastTagData();
+  StaticJsonDocument<384> d;
+  d["relayStatus"] = s.relayOn ? "On" : "Off";
+  d["buzzerStatus"] = s.buzzerOn ? "On" : "Off";
+  d["buttonStatus"] = s.buttonPressed ? "Pressed" : "Released";
+  d["tagData"] = tag[0] ? tag : "No tag read";
+  d["pendingWrite"] = _nfc.isPendingWrite();
+  sendJson(d);
 }
 
-void WebServerManager::handleFileStatus() {
-  String json = "{";
-  json += "\"fileExists\":" + String(SPIFFS.exists("/index.html") ? "true" : "false");
-  json += "}";
-  server.send(200, "application/json", json);
+void WebServerManager::handlePressCounter() {
+  // Dashboards expect a Unix timestamp (s); derive it from NTP time when the clock is valid.
+  unsigned long lastUnix = 0;
+  const unsigned long lastMs = _press.getLastPulseTime();
+  const time_t now = time(nullptr);
+  if (lastMs && now > 1700000000L) lastUnix = (unsigned long)now - (millis() - lastMs) / 1000UL;
+
+  StaticJsonDocument<192> d;
+  d["count"] = _press.getCount();
+  d["lastPulseDuration"] = _press.getLastPulseDuration();
+  d["lastPulseTime"] = lastUnix;
+  d["inPulseTrain"] = _press.getInPulseTrain();
+  sendJson(d);
+}
+
+void WebServerManager::handleWriteTag() {
+  const String text = _srv.arg("tagText");
+  if (text.length() == 0 || text.length() >= MAX_TAG_DATA_LENGTH) {
+    _ctrl.playErrorSound();
+    sendText(400, "tagText missing or too long");
+    return;
+  }
+  _nfc.setPendingWrite(text.c_str());
+  sendText(200, "Write queued - present the tag within 30 s");
 }
 
 void WebServerManager::begin() {
-  if (!SPIFFS.begin()) {
-    Serial.println("Failed to mount SPIFFS");
-    return;
-  }
-  server.onNotFound([this]() {
-    server.send(404, "text/plain", "Not found");
-  });
-  setupRoutes();
-  server.begin();
-  Serial.println("Web server started");
+  routes();
+  _srv.begin();
 
-  // Initialize ArduinoOTA
-  ArduinoOTA.setHostname(configManager.get().device);
-  ArduinoOTA.setPassword("admin");
-  ArduinoOTA.onStart([]() {
-    Serial.println("OTA Update: Start");
-  });
-  ArduinoOTA.onEnd([]() {
-    Serial.println("\nOTA Update: End");
-  });
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("OTA Update: Progress: %u%%\r", (progress / (total / 100)));
-  });
-  ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("OTA Update: Error[%u]: ", error);
-    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-    else if (error == OTA_END_ERROR) Serial.println("End Failed");
-  });
+  ArduinoOTA.setHostname(_config.get().device);
+  ArduinoOTA.setPassword(_config.get().otaPassword);
+  ArduinoOTA.onStart([]() { Serial.println("[OTA] start"); });
+  ArduinoOTA.onEnd([]() { Serial.println("[OTA] done"); });
+  ArduinoOTA.onError([](ota_error_t e) { Serial.printf("[OTA] error %u\n", (unsigned)e); });
   ArduinoOTA.begin();
-  Serial.println("OTA Update service started");
+  Serial.println("[Web] HTTP server on :80, OTA enabled");
 }
 
 void WebServerManager::handleClient() {
-  server.handleClient();
+  _srv.handleClient();
   ArduinoOTA.handle();
-}
-
-void WebServerManager::updateStatus() {
-  lastTagData = nfcManager.getLastTagData();
 }

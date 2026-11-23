@@ -1,0 +1,9 @@
+(version 1)
+(rule mains_ac_to_lv
+  (severity error)
+  (condition "A.NetClass == 'Mains' && B.NetClass != 'Mains' && B.NetClass != 'MainsDC' && (A.Type != 'Pad' || B.Type != 'Pad') && !(A.insideCourtyard('K1') && B.insideCourtyard('K1')) && !(A.insideCourtyard('K2') && B.insideCourtyard('K2')) && !(A.insideCourtyard('K3') && B.insideCourtyard('K3')) && !(A.insideCourtyard('K4') && B.insideCourtyard('K4')) && !(A.insideCourtyard('K5') && B.insideCourtyard('K5'))")
+  (constraint clearance (min 5.0mm)))
+(rule mains_dc_to_lv
+  (severity error)
+  (condition "A.NetClass == 'MainsDC' && B.NetClass != 'Mains' && B.NetClass != 'MainsDC' && (A.Type != 'Pad' || B.Type != 'Pad') && !(A.insideCourtyard('K1') && B.insideCourtyard('K1')) && !(A.insideCourtyard('K2') && B.insideCourtyard('K2')) && !(A.insideCourtyard('K3') && B.insideCourtyard('K3')) && !(A.insideCourtyard('K4') && B.insideCourtyard('K4')) && !(A.insideCourtyard('K5') && B.insideCourtyard('K5'))")
+  (constraint clearance (min 5.0mm)))

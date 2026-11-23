@@ -1,80 +1,84 @@
+// Hydraulic press counter - ESP-12E/F firmware.   Hardware: hardware/press_counter (KiCad project).
+//
+// Libraries: ESP8266 core, MFRC522, NDEF (NfcAdapter for MFRC522), ArduinoJson 6, ESPAsyncTCP + asyncHTTPrequest.
+// WiFi credentials: copy secrets.h.example to secrets.h.
 #include <Arduino.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include "define.h"
 #include "ConfigManager.h"
-#include "WebServerManager.h"
 #include "InfluxDB.h"
 #include "ControlManager.h"
-#include "NfcManager.h"
 #include "PressCounter.h"
+#include "NfcManager.h"
+#include "WebServerManager.h"
 
-ESP8266WebServer server(80);
-WiFiClient wifiClient;
+// Object graph (declaration order matters: later objects reference earlier ones)
+static ESP8266WebServer server(80);
+static ConfigManager    configManager;
+static InfluxDB         influxDB(configManager);
+static ControlManager   controlManager(configManager, influxDB);
+static PressCounter     pressCounter(influxDB, configManager, controlManager);
+static NfcManager       nfcManager;
+static WebServerManager webManager(server, configManager, controlManager, nfcManager, pressCounter);
 
-ConfigManager configManager;
-ControlManager controlManager(configManager);
-NfcManager nfcManager;
-InfluxDB influxDB(configManager);
-PressCounter pressCounter(PRESS_SENSOR_PIN, influxDB, configManager, controlManager);
-WebServerManager webManager(server, configManager, controlManager, nfcManager, pressCounter);
-
-unsigned long lastPressTime = 0;
-const unsigned long PRESS_TIMEOUT = 10 * 60 * 1000; // 10 minutes in milliseconds
-
-const unsigned long nfcINTERVAL = 2000;
-unsigned long nfcPreviousMillis = 0;
-
-void setup() {
-  Serial.begin(74880);
-  Serial.println("---startup begin---");
-  delay(1000);
-  controlManager.begin();
-  //controlManager.playStartupTone();
-  configManager.load();
-  pressCounter.begin();
-  if(!nfcManager.begin()){
-    controlManager.playErrorSound();
-    Serial.println("NFC not connected!");
+static void connectWifi() {
+  if (!WIFI_SSID[0]) {
+    Serial.println("[WiFi] no SSID configured - create secrets.h (see secrets.h.example). Running offline.");
+    controlManager.playWarningSound();
+    return;
   }
-  webManager.begin();
-  influxDB.begin();
-  Serial.print("Connecting to ");
-  Serial.println(WIFI_SSID);
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);                 // the core re-joins by itself after a router reboot
+  WiFi.persistent(false);
+  WiFi.hostname(configManager.get().device);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD );
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+  Serial.print("[WiFi] connecting");
+  const unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 20000UL) {
+    delay(250);
+    Serial.print('.');
+    yield();
   }
-
-  Serial.println("");
-  Serial.println("WiFi connected!");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
   if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("\n[WiFi] connected, IP %s\n", WiFi.localIP().toString().c_str());
     influxDB.sendDeviceInfo();
     controlManager.playSuccessSound();
   } else {
+    Serial.println("\n[WiFi] not connected yet - continuing offline, will keep retrying");
     controlManager.playErrorSound();
   }
-  controlManager.startTemperatureReporting();
+}
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("\n--- press counter boot ---");
+
+  controlManager.begin();                      // relay OFF first
+  configManager.load();
+  influxDB.begin();
+  pressCounter.begin();
+
+  if (!nfcManager.begin()) {
+    Serial.println("[NFC] RC522 not detected - check the module in socket P1");
+    controlManager.playErrorSound();
+  }
+  webManager.begin();
+  connectWifi();
+  controlManager.playStartupTone();
 }
 
 void loop() {
-    webManager.handleClient();
-    controlManager.handleButton();
-    pressCounter.handle();
-    
-    // Check if press counter has been idle for 10 minutes
-    if (pressCounter.getLastPulseTime() > 0 && 
-        millis() - pressCounter.getLastPulseTime() > PRESS_TIMEOUT &&
-        controlManager.getStatus().relayOn) {
-        controlManager.setRelayState(false, false, &influxDB);
-        Serial.println("Turned off relay due to 10-minute inactivity");
-    }
-    
-    unsigned long nfcCurrentMillis = millis();
-    if (nfcCurrentMillis - nfcPreviousMillis >= nfcINTERVAL) {
-      nfcPreviousMillis = nfcCurrentMillis;
-      nfcManager.handleNfcLoop(webManager, controlManager, influxDB, pressCounter);  // Add pressCounter parameter
-    }
+  webManager.handleClient();
+  controlManager.handle();
+  pressCounter.handle();
+  nfcManager.handle(controlManager, influxDB, pressCounter);
+  influxDB.loop();
+
+  // Safety: switch the machine off after 10 min without a press (counted from relay-on or the last press)
+  if (controlManager.relayOn()) {
+    const unsigned long lastActivity = max(controlManager.relayOnSince(), pressCounter.getLastPulseTime());
+    if (millis() - lastActivity > RELAY_IDLE_TIMEOUT_MS) controlManager.setRelay(false, "idle timeout");
+  }
 }

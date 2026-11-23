@@ -1,0 +1,38 @@
+# secrets / build output
+V2/secrets.h
+V2/build/
+*.bin
+*.elf
+*.map
+V2/Archive.zip
+
+# python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# KiCad scratch (the generated fabrication files in hardware/fabrication ARE kept)
+hardware/**/*-backups/
+hardware/**/fp-info-cache
+hardware/**/*.kicad_prl
+hardware/*/fr/
+hardware/*/route*.log
+hardware/*/place_only.*
+hardware/*/preview.png
+hardware/*/routed_pass*.kicad_pcb
+hardware/*/*_repaired.*
+hardware/tools/freerouting/
+
+# firmware build output
+firmware/**/.pio/
+firmware/tests/*.exe
+firmware/tests/test_proto
+firmware/build/
+*.hex
+
+# bench build (ESP32-S3 target)
+firmware/press_counter/build_s3/
+firmware/press_counter/build/

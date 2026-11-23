@@ -1,669 +1,1608 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP8266 Control Panel</title>
-    <style>
-        :root {
-            --primary: #2c3e50;
-            --secondary: #3498db;
-            --success: #2ecc71;
-            --warning: #f39c12;
-            --danger: #e74c3c;
-            --light: #ecf0f1;
-            --dark: #34495e;
-        }
-        
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background-color: #f5f5f5;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-        }
-        
-        header {
-            text-align: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #eee;
-        }
-        
-        h1 {
-            color: var(--primary);
-            margin-bottom: 10px;
-        }
-        
-        .status-bar {
-            display: flex;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            margin-bottom: 20px;
-            padding: 15px;
-            background-color: var(--light);
-            border-radius: 6px;
-        }
-        
-        .status-item {
-            margin: 5px 10px;
-            text-align: center;
-        }
-        
-        .status-label {
-            font-weight: bold;
-            display: block;
-            margin-bottom: 5px;
-        }
-        
-        .status-value {
-            padding: 5px 10px;
-            border-radius: 4px;
-            background: white;
-            min-width: 100px;
-            display: inline-block;
-        }
-        
-        .status-on {
-            color: var(--success);
-            font-weight: bold;
-        }
-        
-        .status-off {
-            color: var(--danger);
-        }
-        
-        .card {
-            background: white;
-            border-radius: 6px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            margin-bottom: 20px;
-            padding: 20px;
-        }
-        
-        .card-header {
-            font-size: 1.2rem;
-            font-weight: bold;
-            margin-bottom: 15px;
-            color: var(--primary);
-            border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
-        }
-        
-        .form-group {
-            margin-bottom: 15px;
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 600;
-        }
-        
-        input[type="text"],
-        input[type="number"],
-        input[type="password"] {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
-        }
-        
-        button {
-            padding: 10px 15px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: background-color 0.3s;
-        }
-        
-        .btn-primary {
-            background-color: var(--secondary);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background-color: #2980b9;
-        }
-        
-        .btn-success {
-            background-color: var(--success);
-            color: white;
-        }
-        
-        .btn-success:hover {
-            background-color: #27ae60;
-        }
-        
-        .btn-warning {
-            background-color: var(--warning);
-            color: white;
-        }
-        
-        .btn-warning:hover {
-            background-color: #e67e22;
-        }
-        
-        .btn-danger {
-            background-color: var(--danger);
-            color: white;
-        }
-        
-        .btn-danger:hover {
-            background-color: #c0392b;
-        }
-        
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-        }
-        
-        .action-buttons {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        
-        .action-buttons button {
-            flex: 1;
-            min-width: 120px;
-        }
-        
-        .tab-container {
-            margin-top: 20px;
-        }
-        
-        .tabs {
-            display: flex;
-            border-bottom: 1px solid #ddd;
-            margin-bottom: 20px;
-        }
-        
-        .tab {
-            padding: 10px 20px;
-            cursor: pointer;
-            border: 1px solid transparent;
-            border-bottom: none;
-            border-radius: 4px 4px 0 0;
-            background: #f8f9fa;
-            margin-right: 5px;
-        }
-        
-        .tab.active {
-            background: white;
-            border-color: #ddd;
-            border-bottom-color: white;
-            margin-bottom: -1px;
-        }
-        
-        .tab-content {
-            display: none;
-        }
-        
-        .tab-content.active {
-            display: block;
-        }
-        
-        .notification {
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 4px;
-            display: none;
-        }
-        
-        .notification.success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .notification.error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        
-        .pulse-counter {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 6px;
-            margin-top: 15px;
-        }
-        
-        .counter-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: var(--secondary);
-        }
-        
-        @media (max-width: 768px) {
-            .grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .status-bar {
-                flex-direction: column;
-                align-items: center;
-            }
-            
-            .status-item {
-                margin: 10px 0;
-            }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>HydroPress Monitor</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=JetBrains+Mono:wght@400;700&family=Barlow:wght@400;500;600&display=swap');
+
+:root {
+  --bg:       #0d0f14;
+  --surface:  #161923;
+  --panel:    #1e2333;
+  --border:   #2a3148;
+  --accent:   #f59e0b;
+  --accent2:  #3b82f6;
+  --green:    #22c55e;
+  --red:      #ef4444;
+  --orange:   #f97316;
+  --text:     #e2e8f0;
+  --muted:    #64748b;
+  --dim:      #94a3b8;
+  --glow:     rgba(245,158,11,0.15);
+  --glow-b:   rgba(59,130,246,0.15);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Barlow', sans-serif;
+  font-size: 16px;
+  overflow-x: hidden;
+}
+
+/* ── Scanline texture overlay ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.04) 2px,
+    rgba(0,0,0,0.04) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── TOP NAV ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: 56px;
+  background: var(--surface);
+  border-bottom: 2px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+.logo {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 1.4rem;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+.logo span { color: var(--dim); font-weight: 400; }
+.topbar-right { display: flex; align-items: center; gap: 16px; }
+.conn-badge {
+  display: flex; align-items: center; gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; color: var(--muted);
+}
+.conn-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--muted);
+  transition: background 0.3s;
+}
+.conn-dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.conn-dot.err { background: var(--red);   box-shadow: 0 0 6px var(--red);   }
+.conn-dot.warn{ background: var(--orange); box-shadow: 0 0 6px var(--orange); }
+
+/* ── MAIN LAYOUT ── */
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  grid-template-rows: auto 1fr;
+  min-height: calc(100vh - 56px);
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  background: var(--surface);
+  border-right: 2px solid var(--border);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  grid-row: 1 / 3;
+}
+
+.section-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+/* State card */
+.state-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.state-card.active-session {
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px var(--green), inset 0 0 20px rgba(34,197,94,0.06);
+}
+.state-card.die-loaded {
+  border-color: var(--accent2);
+  box-shadow: 0 0 0 1px var(--accent2), inset 0 0 20px var(--glow-b);
+}
+.state-card.idle { border-color: var(--border); }
+
+.state-icon {
+  font-size: 2rem;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.state-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.state-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 1.3rem;
+  color: var(--text);
+  letter-spacing: 0.02em;
+  word-break: break-all;
+}
+.state-value.none { color: var(--muted); font-weight: 400; font-size: 1rem; }
+.state-sub {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 4px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Press status pill */
+.press-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: all 0.3s;
+}
+.press-status.on  { background: rgba(34,197,94,0.15);  color: var(--green);  border: 1px solid var(--green); }
+.press-status.off { background: rgba(239,68,68,0.1);   color: var(--red);    border: 1px solid rgba(239,68,68,0.4); }
+.press-status.test{ background: rgba(245,158,11,0.12); color: var(--accent); border: 1px solid var(--accent); }
+.press-led {
+  width: 12px; height: 12px; border-radius: 50%;
+  animation: blink 1.4s ease-in-out infinite;
+}
+.press-status.on  .press-led { background: var(--green);  box-shadow: 0 0 8px var(--green); }
+.press-status.off .press-led { background: var(--red);    animation: none; }
+.press-status.test .press-led{ background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* Nav tabs (sidebar) */
+.nav-tabs { display: flex; flex-direction: column; gap: 4px; margin-top: auto; }
+.nav-tab {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+  transition: all 0.2s;
+  user-select: none;
+}
+.nav-tab:hover { background: var(--panel); color: var(--text); }
+.nav-tab.active { background: var(--panel); border-color: var(--border); color: var(--accent); }
+.nav-tab .tab-icon { font-size: 1.1rem; width: 20px; text-align: center; }
+
+/* ── MAIN CONTENT ── */
+.main {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+/* ── BIG COUNTER ── */
+.counter-hero {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px 32px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0;
+  overflow: hidden;
+  position: relative;
+}
+.counter-hero::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2), var(--green));
+}
+
+.metric-block {
+  padding: 16px 24px;
+  border-right: 1px solid var(--border);
+}
+.metric-block:last-child { border-right: none; }
+.metric-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.metric-num {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 4rem;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+  transition: all 0.3s;
+}
+.metric-num.blue  { color: var(--accent2); }
+.metric-num.green { color: var(--green); }
+.metric-num.dim   { color: var(--muted); }
+.metric-unit {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 4px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── ACTIVITY PULSE ── */
+.activity-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+}
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.panel-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Mini bar chart */
+.pulse-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 60px;
+}
+.pulse-bar {
+  flex: 1;
+  background: var(--panel);
+  border-radius: 3px 3px 0 0;
+  transition: height 0.3s, background 0.3s;
+  min-height: 4px;
+}
+.pulse-bar.active { background: var(--accent); box-shadow: 0 0 6px rgba(245,158,11,0.5); }
+
+/* Timeline log */
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.log-list::-webkit-scrollbar { width: 3px; }
+.log-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.log-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--panel);
+  font-size: 0.78rem;
+  animation: slideIn 0.3s ease;
+}
+@keyframes slideIn { from { opacity:0; transform: translateX(-8px); } to { opacity:1; transform: translateX(0); } }
+.log-time {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--muted);
+  white-space: nowrap;
+  font-size: 0.7rem;
+  padding-top: 1px;
+}
+.log-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.log-msg { color: var(--dim); line-height: 1.4; }
+.log-entry.ev-die    .log-dot { background: var(--accent2); }
+.log-entry.ev-worker .log-dot { background: var(--green); }
+.log-entry.ev-press  .log-dot { background: var(--accent); }
+.log-entry.ev-error  .log-dot { background: var(--red); }
+.log-entry.ev-info   .log-dot { background: var(--muted); }
+
+/* ── FAILURE BANNERS ── */
+.alert-bar {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid;
+  font-size: 0.85rem;
+  font-weight: 600;
+  animation: slideIn 0.3s ease;
+}
+.alert-bar.show { display: flex; }
+.alert-bar.warn { background: rgba(245,158,11,0.1); border-color: var(--accent); color: var(--accent); }
+.alert-bar.err  { background: rgba(239,68,68,0.1);  border-color: var(--red);    color: var(--red); }
+.alert-bar.ok   { background: rgba(34,197,94,0.1);  border-color: var(--green);  color: var(--green); }
+.alert-icon { font-size: 1.1rem; flex-shrink: 0; }
+.alert-text { flex: 1; }
+.alert-tag  {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.08);
+}
+.pending-count {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: inherit;
+}
+
+/* ── TAB PAGES ── */
+.tab-page { display: none; }
+.tab-page.active { display: contents; }
+
+/* ── SETTINGS ── */
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Data backend toggle */
+.backend-toggle {
+  display: flex;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.backend-opt {
+  flex: 1; text-align: center;
+  padding: 10px;
+  cursor: pointer;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  transition: all 0.2s;
+  border-right: 1px solid var(--border);
+}
+.backend-opt:last-child { border-right: none; }
+.backend-opt.active { background: var(--accent); color: #000; }
+
+.backend-section { display: none; }
+.backend-section.visible { display: block; }
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.form-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.form-input {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.form-input:focus { border-color: var(--accent); }
+.form-input::placeholder { color: var(--muted); }
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-accent  { background: var(--accent);  color: #000; }
+.btn-accent:hover  { background: #fbbf24; }
+.btn-blue    { background: var(--accent2); color: #fff; }
+.btn-blue:hover    { background: #60a5fa; }
+.btn-ghost   { background: transparent; border: 1px solid var(--border); color: var(--dim); }
+.btn-ghost:hover   { border-color: var(--text); color: var(--text); }
+.btn-danger  { background: rgba(239,68,68,0.15); border: 1px solid var(--red); color: var(--red); }
+.btn-danger:hover  { background: rgba(239,68,68,0.25); }
+.btn-sm { padding: 6px 14px; font-size: 0.8rem; }
+.btn-full { width: 100%; }
+
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+/* ── NFC WRITER ── */
+.nfc-presets {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.preset-chip {
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--dim);
+  font-size: 0.78rem;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.preset-chip:hover { border-color: var(--accent); color: var(--accent); }
+.preset-chip.die    { border-color: rgba(59,130,246,0.4);  color: var(--accent2); }
+.preset-chip.worker { border-color: rgba(34,197,94,0.4);   color: var(--green); }
+
+/* NFC write status */
+.nfc-status-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px dashed var(--border);
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  transition: all 0.3s;
+}
+.nfc-status-box.waiting {
+  border-color: var(--accent);
+  background: var(--glow);
+  color: var(--accent);
+}
+.nfc-status-box.success {
+  border-color: var(--green);
+  background: rgba(34,197,94,0.08);
+  color: var(--green);
+}
+.nfc-radar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+}
+.nfc-radar::after {
+  content: '';
+  position: absolute; inset: -6px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: 0;
+}
+.nfc-status-box.waiting .nfc-radar::after {
+  animation: radar 1.5s ease-out infinite;
+}
+@keyframes radar { 0%{opacity:0.6;transform:scale(0.8)} 100%{opacity:0;transform:scale(1.6)} }
+
+/* ── QUEUE INSPECTOR ── */
+.queue-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.queue-table th {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.queue-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--dim);
+  vertical-align: middle;
+}
+.queue-table tr:last-child td { border-bottom: none; }
+.queue-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.queue-badge.pending  { background: rgba(245,158,11,0.2); color: var(--accent); }
+.queue-badge.sent     { background: rgba(34,197,94,0.15); color: var(--green); }
+.queue-badge.failed   { background: rgba(239,68,68,0.15); color: var(--red); }
+
+/* ── FIRMWARE ── */
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  padding: 36px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--muted);
+}
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--accent);
+  background: var(--glow);
+  color: var(--accent);
+}
+.drop-icon { font-size: 2.5rem; margin-bottom: 10px; }
+.drop-label { font-size: 0.9rem; }
+.drop-sub { font-size: 0.75rem; margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar {
+    grid-row: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 2px solid var(--border);
+    gap: 8px;
+    padding: 12px;
+  }
+  .sidebar .state-card { flex: 1; min-width: 130px; }
+  .nav-tabs { flex-direction: row; width: 100%; margin-top: 0; }
+  .nav-tab { flex: 1; justify-content: center; font-size: 0.8rem; }
+  .nav-tab .tab-icon { display: none; }
+  .counter-hero { grid-template-columns: 1fr; }
+  .metric-block { border-right: none; border-bottom: 1px solid var(--border); padding: 12px 16px; }
+  .metric-block:last-child { border-bottom: none; }
+  .metric-num { font-size: 2.8rem; }
+  .activity-row { grid-template-columns: 1fr; }
+  .settings-grid { grid-template-columns: 1fr; }
+}
+
+/* ── TOAST ── */
+.toast-container {
+  position: fixed;
+  bottom: 20px; right: 20px;
+  display: flex; flex-direction: column; gap: 8px;
+  z-index: 9998;
+}
+.toast {
+  padding: 12px 18px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-width: 240px;
+  max-width: 340px;
+  border: 1px solid;
+  animation: toastIn 0.3s ease, toastOut 0.4s ease 3.6s forwards;
+  backdrop-filter: blur(4px);
+}
+@keyframes toastIn  { from { opacity:0; transform: translateY(12px); } }
+@keyframes toastOut { to   { opacity:0; transform: translateY(12px); } }
+.toast.ok  { background: rgba(34,197,94,0.15);  border-color: var(--green);  color: var(--green); }
+.toast.err { background: rgba(239,68,68,0.12);  border-color: var(--red);    color: var(--red);   }
+.toast.inf { background: rgba(59,130,246,0.12); border-color: var(--accent2);color: var(--accent2); }
+.toast.wrn { background: rgba(245,158,11,0.12); border-color: var(--accent); color: var(--accent); }
+
+/* ── MISC ── */
+.sep { height: 1px; background: var(--border); margin: 4px 0; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.text-muted { color: var(--muted); }
+.text-accent { color: var(--accent); }
+.text-green { color: var(--green); }
+.text-red { color: var(--red); }
+.text-blue { color: var(--accent2); }
+</style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>ESP8266 Control Panel</h1>
-            <p>Manage your device settings and controls</p>
-        </header>
-        
-        <div id="notification" class="notification"></div>
-        
-        <div class="status-bar">
-            <div class="status-item">
-                <span class="status-label">Relay Status:</span>
-                <span class="status-value" id="relay-status">Loading...</span>
-            </div>
-            <div class="status-item">
-                <span class="status-label">Buzzer Status:</span>
-                <span class="status-value" id="buzzer-status">Loading...</span>
-            </div>
-            <div class="status-item">
-                <span class="status-label">Button Status:</span>
-                <span class="status-value" id="button-status">Loading...</span>
-            </div>
-            <div class="status-item">
-                <span class="status-label">NFC Tag:</span>
-                <span class="status-value" id="tag-data">Loading...</span>
-            </div>
-        </div>
-        
-        <div class="tabs">
-            <div class="tab active" data-tab="controls">Controls</div>
-            <div class="tab" data-tab="settings">Settings</div>
-            <div class="tab" data-tab="nfc">NFC</div>
-            <div class="tab" data-tab="firmware">Firmware</div>
-        </div>
-        
-        <div class="tab-container">
-            <!-- Controls Tab -->
-            <div class="tab-content active" id="controls-tab">
-                <div class="grid">
-                    <div class="card">
-                        <div class="card-header">Relay Control</div>
-                        <div class="action-buttons">
-                            <button class="btn-primary" onclick="toggleRelay()">Toggle Relay</button>
-                        </div>
-                    </div>
-                    
-                    <div class="card">
-                        <div class="card-header">Buzzer Sounds</div>
-                        <div class="action-buttons">
-                            <button class="btn-success" onclick="playSuccessSound()">Success</button>
-                            <button class="btn-warning" onclick="playWarningSound()">Warning</button>
-                            <button class="btn-danger" onclick="playErrorSound()">Error</button>
-                        </div>
-                    </div>
-                    
-                    <div class="card">
-                        <div class="card-header">Pulse Counter</div>
-                        <div class="pulse-counter">
-                            <div class="form-group">
-                                <label>Total Count:</label>
-                                <div class="counter-value" id="pulse-count">0</div>
-                            </div>
-                            <div class="form-group">
-                                <label>Last Pulse Duration:</label>
-                                <div id="last-pulse-duration">0 ms</div>
-                            </div>
-                            <div class="form-group">
-                                <label>Last Pulse Time:</label>
-                                <div id="last-pulse-time">Never</div>
-                            </div>
-                            <div class="form-group">
-                                <label>Pulse Train Status:</label>
-                                <div id="pulse-train-status">Inactive</div>
-                            </div>
-                            <button class="btn-primary" onclick="updatePulseCounter()">Refresh</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Settings Tab -->
-            <div class="tab-content" id="settings-tab">
-                <div class="card">
-                    <div class="card-header">Device Configuration</div>
-                    <form id="settings-form">
-                        <div class="form-group">
-                            <label for="device">Device Name:</label>
-                            <input type="text" id="device" name="device" placeholder="Enter device name">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="influxHost">InfluxDB Host:</label>
-                            <input type="text" id="influxHost" name="influxHost" placeholder="Enter InfluxDB host">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="influxPort">InfluxDB Port:</label>
-                            <input type="number" id="influxPort" name="influxPort" placeholder="Enter InfluxDB port">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="influxBucket">InfluxDB Bucket:</label>
-                            <input type="text" id="influxBucket" name="influxBucket" placeholder="Enter InfluxDB bucket">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="influxOrg">InfluxDB Organization:</label>
-                            <input type="text" id="influxOrg" name="influxOrg" placeholder="Enter InfluxDB organization">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="influxToken">InfluxDB Token:</label>
-                            <input type="password" id="influxToken" name="influxToken" placeholder="Enter InfluxDB token">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="minPulseDuration">Minimum Pulse Duration (ms):</label>
-                            <input type="number" id="minPulseDuration" name="minPulseDuration" placeholder="Enter minimum pulse duration">
-                        </div>
-                        
-                        <button type="button" class="btn-primary" onclick="loadSettings()">Load Current Settings</button>
-                        <button type="button" class="btn-success" onclick="saveSettings()">Save Settings</button>
-                    </form>
-                </div>
-            </div>
-            
-            <!-- NFC Tab -->
-            <div class="tab-content" id="nfc-tab">
-                <div class="card">
-                    <div class="card-header">NFC Tag Operations</div>
-                    <div class="form-group">
-                        <label for="tagText">Text to Write to NFC Tag:</label>
-                        <input type="text" id="tagText" placeholder="Enter text to write to NFC tag">
-                    </div>
-                    <button class="btn-primary" onclick="writeTag()">Write to NFC Tag</button>
-                    
-                    <div class="form-group" style="margin-top: 20px;">
-                        <label>Last Read Tag Data:</label>
-                        <div id="last-tag-data">No tag read yet</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Firmware Tab -->
-            <div class="tab-content" id="firmware-tab">
-                <div class="card">
-                    <div class="card-header">Firmware Update</div>
-                    <p>Update the device firmware by uploading a new binary file.</p>
-                    <div class="action-buttons">
-                        <button class="btn-primary" onclick="goToFirmwareUpdate()">Update Firmware</button>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">HTML Interface Update</div>
-                    <p>Upload a new HTML interface file to customize the web interface.</p>
-                    <form id="upload-form" action="/upload" method="POST" enctype="multipart/form-data">
-                        <div class="form-group">
-                            <label for="htmlFile">Select HTML File:</label>
-                            <input type="file" id="htmlFile" name="htmlFile" accept=".html">
-                        </div>
-                        <button type="submit" class="btn-primary">Upload HTML</button>
-                    </form>
-                </div>
-            </div>
-        </div>
+
+<!-- ── TOPBAR ── -->
+<div class="topbar">
+  <div class="logo">HydroPress <span>Monitor</span></div>
+  <div class="topbar-right">
+    <div class="conn-badge">
+      <div class="conn-dot" id="dot-wifi"></div> WiFi
+    </div>
+    <div class="conn-badge">
+      <div class="conn-dot" id="dot-db"></div> <span id="db-label">InfluxDB</span>
+    </div>
+    <div class="conn-badge mono" id="clock" style="color:var(--dim);font-size:0.75rem">--:--:--</div>
+  </div>
+</div>
+
+<!-- ── LAYOUT ── -->
+<div class="layout">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+    <!-- Press state pill -->
+    <div class="press-status off" id="press-pill">
+      <span id="press-pill-label">PRESS OFF</span>
+      <div class="press-led"></div>
     </div>
 
-    <script>
-        // Tab switching functionality
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                // Remove active class from all tabs and content
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                
-                // Add active class to clicked tab
-                tab.classList.add('active');
-                
-                // Show corresponding content
-                const tabName = tab.getAttribute('data-tab');
-                document.getElementById(`${tabName}-tab`).classList.add('active');
-            });
-        });
-        
-        // Show notification
-        function showNotification(message, isSuccess = true) {
-            const notification = document.getElementById('notification');
-            notification.textContent = message;
-            notification.className = isSuccess ? 'notification success' : 'notification error';
-            notification.style.display = 'block';
-            
-            // Hide notification after 5 seconds
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, 5000);
-        }
-        
-        // Update device status
-        function updateStatus() {
-            fetch('/status')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('relay-status').textContent = data.relayStatus;
-                    document.getElementById('relay-status').className = `status-value ${data.relayStatus === 'On' ? 'status-on' : 'status-off'}`;
-                    
-                    document.getElementById('buzzer-status').textContent = data.buzzerStatus;
-                    document.getElementById('buzzer-status').className = `status-value ${data.buzzerStatus === 'On' ? 'status-on' : 'status-off'}`;
-                    
-                    document.getElementById('button-status').textContent = data.buttonStatus;
-                    document.getElementById('button-status').className = `status-value ${data.buttonStatus === 'Pressed' ? 'status-on' : 'status-off'}`;
-                    
-                    document.getElementById('tag-data').textContent = data.tagData || 'No tag read';
-                    document.getElementById('last-tag-data').textContent = data.tagData || 'No tag read yet';
-                })
-                .catch(error => {
-                    console.error('Error fetching status:', error);
-                });
-        }
-        
-        // Update pulse counter
-        function updatePulseCounter() {
-            fetch('/press_counter')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('pulse-count').textContent = data.count;
-                    document.getElementById('last-pulse-duration').textContent = `${data.lastPulseDuration} ms`;
-                    document.getElementById('last-pulse-time').textContent = data.lastPulseTime ? new Date(data.lastPulseTime * 1000).toLocaleString() : 'Never';
-                    document.getElementById('pulse-train-status').textContent = data.inPulseTrain ? 'Active' : 'Inactive';
-                })
-                .catch(error => {
-                    console.error('Error fetching pulse counter:', error);
-                });
-        }
-        
-        // Toggle relay
-        function toggleRelay() {
-            fetch('/relay', { method: 'POST' })
-                .then(response => response.text())
-                .then(data => {
-                    showNotification('Relay toggled successfully', true);
-                    updateStatus();
-                })
-                .catch(error => {
-                    console.error('Error toggling relay:', error);
-                    showNotification('Error toggling relay', false);
-                });
-        }
-        
-        // Play sounds
-        function playErrorSound() {
-            fetch('/buzzer_error', { method: 'POST' })
-                .then(response => response.text())
-                .then(data => {
-                    showNotification('Error sound played', true);
-                })
-                .catch(error => {
-                    console.error('Error playing error sound:', error);
-                    showNotification('Error playing sound', false);
-                });
-        }
-        
-        function playWarningSound() {
-            fetch('/buzzer_warning', { method: 'POST' })
-                .then(response => response.text())
-                .then(data => {
-                    showNotification('Warning sound played', true);
-                })
-                .catch(error => {
-                    console.error('Error playing warning sound:', error);
-                    showNotification('Error playing sound', false);
-                });
-        }
-        
-        function playSuccessSound() {
-            fetch('/buzzer_success', { method: 'POST' })
-                .then(response => response.text())
-                .then(data => {
-                    showNotification('Success sound played', true);
-                })
-                .catch(error => {
-                    console.error('Error playing success sound:', error);
-                    showNotification('Error playing sound', false);
-                });
-        }
-        
-        // Write to NFC tag
-        function writeTag() {
-            const tagText = document.getElementById('tagText').value;
-            if (!tagText) {
-                showNotification('Please enter text to write to the tag', false);
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('tagText', tagText);
-            
-            fetch('/write_tag', { 
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.text())
-            .then(data => {
-                showNotification('Ready to write to NFC tag. Please place a tag near the reader.', true);
-                document.getElementById('last-tag-data').textContent = 'Waiting for tag...';
-            })
-            .catch(error => {
-                console.error('Error writing to tag:', error);
-                showNotification('Error preparing to write to tag', false);
-            });
-        }
-        
-        // Load settings
-        function loadSettings() {
-            fetch('/save')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('device').value = data.device || '';
-                    document.getElementById('influxHost').value = data.influxHost || '';
-                    document.getElementById('influxPort').value = data.influxPort || '';
-                    document.getElementById('influxBucket').value = data.influxBucket || '';
-                    document.getElementById('influxOrg').value = data.influxOrg || '';
-                    document.getElementById('influxToken').value = data.influxToken || '';
-                    document.getElementById('minPulseDuration').value = data.minPulseDuration || '';
-                    
-                    showNotification('Settings loaded successfully', true);
-                })
-                .catch(error => {
-                    console.error('Error loading settings:', error);
-                    showNotification('Error loading settings', false);
-                });
-        }
-        
-        // Save settings
-        function saveSettings() {
-            const formData = new FormData();
-            formData.append('device', document.getElementById('device').value);
-            formData.append('influxHost', document.getElementById('influxHost').value);
-            formData.append('influxPort', document.getElementById('influxPort').value);
-            formData.append('influxBucket', document.getElementById('influxBucket').value);
-            formData.append('influxOrg', document.getElementById('influxOrg').value);
-            formData.append('influxToken', document.getElementById('influxToken').value);
-            formData.append('minPulseDuration', document.getElementById('minPulseDuration').value);
-            
-            fetch('/save', { 
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.text())
-            .then(data => {
-                showNotification('Settings saved successfully', true);
-            })
-            .catch(error => {
-                console.error('Error saving settings:', error);
-                showNotification('Error saving settings', false);
-            });
-        }
-        
-        // Go to firmware update page
-        function goToFirmwareUpdate() {
-            window.location.href = '/update';
-        }
-        
-        // Handle form submission for HTML upload
-        document.getElementById('upload-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const formData = new FormData(this);
-            
-            fetch('/upload', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.text())
-            .then(data => {
-                showNotification('HTML file uploaded successfully. Page will refresh.', true);
-                setTimeout(() => {
-                    window.location.reload();
-                }, 2000);
-            })
-            .catch(error => {
-                console.error('Error uploading HTML:', error);
-                showNotification('Error uploading HTML file', false);
-            });
-        });
-        
-        // Initialize page
-        document.addEventListener('DOMContentLoaded', function() {
-            updateStatus();
-            updatePulseCounter();
-            
-            // Update status every 5 seconds
-            setInterval(updateStatus, 5000);
-        });
-    </script>
+    <!-- Die card -->
+    <div class="state-card idle" id="die-card">
+      <div class="state-icon">⚙️</div>
+      <div class="state-title">Installed Die</div>
+      <div class="state-value none" id="die-id">No die loaded</div>
+      <div class="state-sub" id="die-sub">Scan die tag to load</div>
+    </div>
+
+    <!-- Worker card -->
+    <div class="state-card idle" id="worker-card">
+      <div class="state-icon">👷</div>
+      <div class="state-title">Active Worker</div>
+      <div class="state-value none" id="worker-id">No worker</div>
+      <div class="state-sub" id="worker-sub">Scan personnel tag to start</div>
+    </div>
+
+    <!-- Session timer -->
+    <div class="state-card idle" id="session-card">
+      <div class="state-title">Session Time</div>
+      <div class="state-value dim mono" id="session-timer">--:--:--</div>
+      <div class="state-sub" id="idle-warn" style="color:var(--orange);display:none">⚠ Idle timeout soon</div>
+    </div>
+
+    <div class="sep"></div>
+
+    <!-- Sidebar nav -->
+    <div class="nav-tabs">
+      <div class="nav-tab active" data-page="dashboard">
+        <span class="tab-icon">📊</span> Dashboard
+      </div>
+      <div class="nav-tab" data-page="nfc">
+        <span class="tab-icon">📡</span> NFC Writer
+      </div>
+      <div class="nav-tab" data-page="queue">
+        <span class="tab-icon">📦</span> Data Queue
+      </div>
+      <div class="nav-tab" data-page="settings">
+        <span class="tab-icon">⚙️</span> Settings
+      </div>
+      <div class="nav-tab" data-page="firmware">
+        <span class="tab-icon">🔧</span> Firmware
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <main class="main">
+
+    <!-- ── DASHBOARD PAGE ── -->
+    <div class="tab-page active" id="page-dashboard">
+
+      <!-- Alert banners -->
+      <div class="alert-bar warn" id="alert-wifi">
+        <span class="alert-icon">📶</span>
+        <span class="alert-text">WiFi disconnected — counts buffered locally</span>
+        <span class="alert-tag">OFFLINE</span>
+        <span class="pending-count" id="wifi-queue-count"></span>
+      </div>
+      <div class="alert-bar err" id="alert-db">
+        <span class="alert-icon">🗄️</span>
+        <span class="alert-text">Data backend unreachable — <b id="pending-label">0</b> records queued</span>
+        <span class="alert-tag" id="db-fail-tag">INFLUX</span>
+      </div>
+      <div class="alert-bar warn" id="alert-no-die">
+        <span class="alert-icon">⚙️</span>
+        <span class="alert-text">No die loaded — scan a die tag before starting</span>
+      </div>
+      <div class="alert-bar warn" id="alert-test-mode">
+        <span class="alert-icon">🧪</span>
+        <span class="alert-text">TEST MODE — press is ON but parts are not being counted</span>
+      </div>
+
+      <!-- Big counter hero -->
+      <div class="counter-hero">
+        <div class="metric-block">
+          <div class="metric-label">Parts This Session</div>
+          <div class="metric-num" id="metric-session">0</div>
+          <div class="metric-unit" id="metric-session-worker">No worker</div>
+        </div>
+        <div class="metric-block">
+          <div class="metric-label">Parts This Die</div>
+          <div class="metric-num blue" id="metric-die">0</div>
+          <div class="metric-unit" id="metric-die-id">No die</div>
+        </div>
+        <div class="metric-block">
+          <div class="metric-label">Parts Today</div>
+          <div class="metric-num green" id="metric-today">0</div>
+          <div class="metric-unit" id="metric-today-sub">–</div>
+        </div>
+      </div>
+
+      <!-- Activity row -->
+      <div class="activity-row">
+        <!-- Pulse rate chart -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">⚡ Stroke Rate</span>
+            <span class="mono" style="font-size:0.75rem;color:var(--accent)" id="rate-val">– /min</span>
+          </div>
+          <div class="pulse-bars" id="rate-bars">
+            <!-- 20 bars injected by JS -->
+          </div>
+          <div style="margin-top:8px;display:flex;justify-content:space-between;font-size:0.68rem;color:var(--muted)">
+            <span>60s ago</span><span>now</span>
+          </div>
+        </div>
+
+        <!-- Event log -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">📋 Event Log</span>
+            <button class="btn btn-ghost btn-sm" onclick="clearLog()">Clear</button>
+          </div>
+          <div class="log-list" id="log-list">
+            <div class="log-entry ev-info">
+              <span class="log-dot"></span>
+              <span class="log-time" id="boot-time">--:--</span>
+              <span class="log-msg">Device started</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick actions -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">🎮 Manual Controls</span>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" onclick="toggleRelay()">Toggle Relay</button>
+          <button class="btn btn-ghost" onclick="playSound('success')">✅ Success Beep</button>
+          <button class="btn btn-ghost" onclick="playSound('warning')">⚠️ Warning Beep</button>
+          <button class="btn btn-ghost" onclick="playSound('error')">❌ Error Beep</button>
+        </div>
+      </div>
+    </div><!-- /dashboard -->
+
+    <!-- ── NFC WRITER PAGE ── -->
+    <div class="tab-page" id="page-nfc">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">📡 Write NFC Tag</span>
+        </div>
+
+        <div class="section-label" style="margin-bottom:8px">Quick Presets</div>
+        <div class="nfc-presets" id="nfc-presets">
+          <div class="preset-chip die" onclick="setPreset('die','D001')">⚙️ die:D001</div>
+          <div class="preset-chip die" onclick="setPreset('die','D002')">⚙️ die:D002</div>
+          <div class="preset-chip worker" onclick="setPreset('personnel','W001')">👷 personnel:W001</div>
+          <div class="preset-chip worker" onclick="setPreset('personnel','W002')">👷 personnel:W002</div>
+        </div>
+
+        <div class="form-row">
+          <label class="form-label">Tag Type</label>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" id="type-die"    onclick="setTagType('die')"      style="flex:1">⚙️ Die</button>
+            <button class="btn btn-ghost btn-sm" id="type-worker" onclick="setTagType('personnel')" style="flex:1">👷 Personnel</button>
+          </div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">ID / Identifier</label>
+          <input class="form-input" id="nfc-id-input" placeholder="e.g. D003 or W005" oninput="updateTagPreview()">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Tag Data Preview</label>
+          <div class="form-input mono" id="tag-preview" style="color:var(--accent);cursor:default">–</div>
+        </div>
+        <button class="btn btn-accent btn-full" onclick="writeTag()">📡 Queue Write — Present Tag to Reader</button>
+        <div class="nfc-status-box" id="nfc-status-box">
+          <div class="nfc-radar">📡</div>
+          <span id="nfc-status-text">Ready — fill in details above and press Write</span>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:0">
+        <div class="panel-header">
+          <span class="panel-title">🔖 Last Read Tag</span>
+        </div>
+        <div class="mono" id="last-tag-display" style="color:var(--dim);font-size:0.95rem;padding:8px 0">No tag read yet</div>
+      </div>
+    </div><!-- /nfc -->
+
+    <!-- ── QUEUE PAGE ── -->
+    <div class="tab-page" id="page-queue">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">📦 Pending Data Queue</span>
+          <button class="btn btn-ghost btn-sm" onclick="flushQueue()">↑ Retry Flush</button>
+        </div>
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:14px">
+          Records buffered here when the data backend is unreachable. They will be automatically sent when connectivity is restored.
+        </p>
+        <table class="queue-table">
+          <thead>
+            <tr>
+              <th>#</th><th>Time</th><th>Type</th><th>Payload</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="queue-tbody">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Queue empty — all data sent</td></tr>
+          </tbody>
+        </table>
+        <div class="btn-row">
+          <button class="btn btn-danger btn-sm" onclick="clearQueue()">🗑 Clear All Pending</button>
+        </div>
+      </div>
+    </div><!-- /queue -->
+
+    <!-- ── SETTINGS PAGE ── -->
+    <div class="tab-page" id="page-settings">
+
+      <!-- Backend selector -->
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">🗄️ Data Backend</span></div>
+        <div class="backend-toggle">
+          <div class="backend-opt active" id="be-influx"  onclick="selectBackend('influxdb')">InfluxDB v2</div>
+          <div class="backend-opt"        id="be-mqtt"    onclick="selectBackend('mqtt')">MQTT</div>
+          <div class="backend-opt"        id="be-both"    onclick="selectBackend('both')">Both</div>
+        </div>
+
+        <!-- InfluxDB fields -->
+        <div class="backend-section visible" id="bs-influx">
+          <div class="settings-grid">
+            <div class="form-row">
+              <label class="form-label">InfluxDB Host</label>
+              <input class="form-input" id="influxHost" placeholder="192.168.1.100">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Port</label>
+              <input class="form-input" id="influxPort" type="number" placeholder="8086">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Bucket</label>
+              <input class="form-input" id="influxBucket" placeholder="press_data">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Organization</label>
+              <input class="form-input" id="influxOrg" placeholder="my-org">
+            </div>
+          </div>
+          <div class="form-row">
+            <label class="form-label">API Token</label>
+            <input class="form-input" id="influxToken" type="password" placeholder="••••••••••••">
+            <span style="font-size:0.7rem;color:var(--muted);margin-top:4px">Token is write-only — value not shown after save</span>
+          </div>
+        </div>
+
+        <!-- MQTT fields -->
+        <div class="backend-section" id="bs-mqtt">
+          <div class="settings-grid">
+            <div class="form-row">
+              <label class="form-label">MQTT Broker Host</label>
+              <input class="form-input" id="mqttHost" placeholder="192.168.1.100">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Port</label>
+              <input class="form-input" id="mqttPort" type="number" placeholder="1883">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Topic Prefix</label>
+              <input class="form-input" id="mqttTopic" placeholder="press/machine1">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Client ID</label>
+              <input class="form-input" id="mqttClient" placeholder="hydropress-01">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Username</label>
+              <input class="form-input" id="mqttUser" placeholder="(optional)">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Password</label>
+              <input class="form-input" id="mqttPass" type="password" placeholder="(optional)">
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-accent" onclick="saveSettings()">💾 Save Backend Config</button>
+          <button class="btn btn-ghost"  onclick="loadSettings()">↺ Reload from Device</button>
+          <button class="btn btn-ghost btn-sm" onclick="testConnection()">🔌 Test Connection</button>
+        </div>
+      </div>
+
+      <!-- Device settings -->
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">📟 Device</span></div>
+        <div class="settings-grid">
+          <div class="form-row">
+            <label class="form-label">Device Name</label>
+            <input class="form-input" id="device" placeholder="press-01">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Min Pulse Duration (ms)</label>
+            <input class="form-input" id="minPulseDuration" type="number" placeholder="10">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Idle Timeout (min)</label>
+            <input class="form-input" id="idleTimeout" type="number" placeholder="10">
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-accent" onclick="saveDeviceSettings()">💾 Save Device Config</button>
+        </div>
+      </div>
+
+      <!-- OTA password -->
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">🔐 OTA / Security</span></div>
+        <div class="form-row" style="max-width:320px">
+          <label class="form-label">OTA Password</label>
+          <input class="form-input" id="otaPass" type="password" placeholder="••••••">
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" onclick="saveOta()">💾 Set OTA Password</button>
+        </div>
+      </div>
+    </div><!-- /settings -->
+
+    <!-- ── FIRMWARE PAGE ── -->
+    <div class="tab-page" id="page-firmware">
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">⬆ OTA Firmware Update</span></div>
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">
+          Use the ArduinoOTA service (port 8266) from Arduino IDE or PlatformIO.<br>
+          Password is set under Settings → OTA Password.
+        </p>
+        <button class="btn btn-blue" onclick="window.location='/update'">Open OTA Updater</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">🌐 Replace Web Interface</span></div>
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">
+          Upload a new <code>index.html</code> to SPIFFS. The device will serve it immediately after upload.
+        </p>
+        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('html-file').click()">
+          <div class="drop-icon">📄</div>
+          <div class="drop-label">Click or drag an HTML file here</div>
+          <div class="drop-sub">index.html · max ~200 KB</div>
+        </div>
+        <input type="file" id="html-file" accept=".html" style="display:none" onchange="uploadHtml(this)">
+        <div id="upload-progress" style="display:none;margin-top:12px">
+          <div style="height:4px;background:var(--panel);border-radius:2px;overflow:hidden">
+            <div id="upload-bar" style="height:100%;background:var(--accent);width:0%;transition:width 0.3s"></div>
+          </div>
+          <div style="font-size:0.75rem;color:var(--muted);margin-top:6px" id="upload-label">Uploading…</div>
+        </div>
+      </div>
+    </div><!-- /firmware -->
+
+  </main><!-- /main -->
+</div><!-- /layout -->
+
+<div class="toast-container" id="toasts"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════
+const state = {
+  relayOn:       false,
+  testMode:      false,      // die loaded, no worker yet
+  counting:      false,      // worker active + relay on
+  dieId:         null,
+  workerId:      null,
+  sessionStart:  null,
+  sessionCount:  0,
+  dieCount:      0,
+  todayCount:    0,
+  rateHistory:   new Array(20).fill(0),  // strokes/min, last 20 readings
+  lastPulseTime: 0,
+  wifiOk:        true,
+  dbOk:          true,
+  pendingCount:  0,
+  backend:       'influxdb',  // 'influxdb' | 'mqtt' | 'both'
+  lastTag:       '',
+  tagType:       'die',
+  bootTime:      new Date(),
+  logEntries:    [],
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  CLOCK
+// ═══════════════════════════════════════════════════════════════
+function pad(n){ return String(n).padStart(2,'0'); }
+function fmtTime(d){ return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+function fmtDur(ms){
+  const s=Math.floor(ms/1000);
+  return `${pad(Math.floor(s/3600))}:${pad(Math.floor(s/60)%60)}:${pad(s%60)}`;
+}
+
+setInterval(()=>{
+  const now = new Date();
+  document.getElementById('clock').textContent = fmtTime(now);
+  // Session timer
+  if(state.sessionStart){
+    document.getElementById('session-timer').textContent = fmtDur(now - state.sessionStart);
+    // Idle warning (if last pulse > 8 min ago and timeout is 10 min)
+    const idleSince = state.lastPulseTime ? now - state.lastPulseTime : 0;
+    const idleWarn  = document.getElementById('idle-warn');
+    idleWarn.style.display = (idleSince > 8*60*1000 && state.counting) ? 'block' : 'none';
+  }
+}, 1000);
+
+document.getElementById('boot-time').textContent = fmtTime(new Date());
+
+// ═══════════════════════════════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════════════════════════════
+function toast(msg, type='inf'){
+  const c = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(()=>t.remove(), 4200);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LOG
+// ═══════════════════════════════════════════════════════════════
+function addLog(msg, evClass='ev-info'){
+  const list   = document.getElementById('log-list');
+  const entry  = document.createElement('div');
+  const dot    = document.createElement('span');
+  const timeEl = document.createElement('span');
+  const msgEl  = document.createElement('span');
+  entry.className   = `log-entry ${evClass}`;
+  dot.className     = 'log-dot';
+  timeEl.className  = 'log-time';
+  timeEl.textContent = fmtTime(new Date());
+  msgEl.className   = 'log-msg';
+  msgEl.textContent = msg;   // textContent prevents XSS from crafted NFC tags
+  entry.append(dot, timeEl, msgEl);
+  list.prepend(entry);
+  while(list.children.length > 60) list.lastChild.remove();
+}
+function clearLog(){ document.getElementById('log-list').innerHTML=''; }
+
+// ═══════════════════════════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════════════════════════
+document.querySelectorAll('.nav-tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('page-'+tab.dataset.page).classList.add('active');
+    if(tab.dataset.page==='queue') refreshQueue();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDER UI FROM STATE
+// ═══════════════════════════════════════════════════════════════
+function renderState(){
+  // Press pill
+  const pill = document.getElementById('press-pill');
+  const pillLabel = document.getElementById('press-pill-label');
+  if(state.counting){
+    pill.className='press-status on';
+    pillLabel.textContent='PRESS ON — COUNTING';
+  } else if(state.testMode){
+    pill.className='press-status test';
+    pillLabel.textContent='TEST MODE';
+  } else {
+    pill.className='press-status off';
+    pillLabel.textContent='PRESS OFF';
+  }
+
+  // Die card
+  const dieCard = document.getElementById('die-card');
+  const dieVal  = document.getElementById('die-id');
+  const dieSub  = document.getElementById('die-sub');
+  if(state.dieId){
+    dieCard.className='state-card die-loaded';
+    dieVal.className='state-value';
+    dieVal.textContent=state.dieId;
+    dieSub.textContent='Loaded · scan again to unload';
+  } else {
+    dieCard.className='state-card idle';
+    dieVal.className='state-value none';
+    dieVal.textContent='No die loaded';
+    dieSub.textContent='Scan die tag to load';
+  }
+
+  // Worker card
+  const workerCard = document.getElementById('worker-card');
+  const workerVal  = document.getElementById('worker-id');
+  const workerSub  = document.getElementById('worker-sub');
+  if(state.workerId){
+    workerCard.className='state-card active-session';
+    workerVal.className='state-value';
+    workerVal.textContent=state.workerId;
+    workerSub.textContent='Active · scan again to clock out';
+  } else {
+    workerCard.className='state-card idle';
+    workerVal.className='state-value none';
+    workerVal.textContent='No worker';
+    workerSub.textContent='Scan personnel tag to start';
+  }
+
+  // Session card
+  const sessCard = document.getElementById('session-card');
+  sessCard.className = state.counting ? 'state-card active-session' : 'state-card idle';
+  if(!state.sessionStart) document.getElementById('session-timer').textContent='--:--:--';
+
+  // Metrics
+  document.getElementById('metric-session').textContent = state.sessionCount;
+  document.getElementById('metric-session-worker').textContent = state.workerId ? `Worker: ${state.workerId}` : 'No worker';
+  document.getElementById('metric-die').textContent = state.dieId ? state.dieCount : '–';
+  document.getElementById('metric-die-id').textContent = state.dieId ? `Die: ${state.dieId}` : 'No die loaded';
+  document.getElementById('metric-today').textContent = state.todayCount;
+
+  // Alerts
+  function showAlert(id, show){ document.getElementById(id).classList.toggle('show', show); }
+  showAlert('alert-wifi',      !state.wifiOk);
+  showAlert('alert-db',        !state.dbOk);
+  showAlert('alert-no-die',    !state.dieId && !state.workerId);
+  showAlert('alert-test-mode', state.testMode);
+
+  document.getElementById('pending-label').textContent = state.pendingCount;
+
+  // Conn dots
+  document.getElementById('dot-wifi').className = 'conn-dot ' + (state.wifiOk ? 'ok' : 'err');
+  document.getElementById('dot-db').className   = 'conn-dot ' + (state.dbOk   ? 'ok' : 'err');
+  document.getElementById('db-label').textContent = state.backend==='mqtt' ? 'MQTT' : state.backend==='both' ? 'Influx+MQTT' : 'InfluxDB';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RATE BARS
+// ═══════════════════════════════════════════════════════════════
+(function initBars(){
+  const container = document.getElementById('rate-bars');
+  for(let i=0;i<20;i++){
+    const b=document.createElement('div');
+    b.className='pulse-bar';
+    b.id='bar'+i;
+    container.appendChild(b);
+  }
+})();
+
+function updateRateBars(){
+  const max = Math.max(1,...state.rateHistory);
+  state.rateHistory.forEach((v,i)=>{
+    const bar = document.getElementById('bar'+i);
+    const pct = Math.round((v/max)*100);
+    bar.style.height = pct+'%';
+    bar.className = 'pulse-bar' + (i===19&&v>0?' active':'');
+  });
+  const last = state.rateHistory[19];
+  document.getElementById('rate-val').textContent = last>0 ? `${last} /min` : '– /min';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  NFC TAG LOGIC
+// ═══════════════════════════════════════════════════════════════
+function handleTagScan(rawTag){
+  if(!rawTag || rawTag.length===0) return;
+  state.lastTag = rawTag;
+  document.getElementById('last-tag-display').textContent = rawTag;
+  addLog(`Tag scanned: ${rawTag}`, 'ev-info');
+
+  const dieMatch      = rawTag.match(/^die:(.+)$/i);
+  const workerMatch   = rawTag.match(/^personnel:(.+)$/i);
+
+  if(dieMatch){
+    const dieId = dieMatch[1].trim();
+    if(state.dieId === dieId){
+      // Same die scanned again → unload
+      addLog(`Die ${dieId} unloaded`, 'ev-die');
+      toast(`Die ${dieId} unloaded`, 'wrn');
+      state.dieId = null;
+      state.dieCount = 0;
+      state.testMode = false;
+      // If worker was active, end session too
+      if(state.workerId) endWorkerSession('Die removed');
+    } else {
+      // New die → load, enter test mode
+      state.dieId    = dieId;
+      state.dieCount = 0;
+      state.testMode = true;
+      addLog(`Die ${dieId} loaded — TEST MODE (relay ON, not counting)`, 'ev-die');
+      toast(`Die ${dieId} loaded — test mode active`, 'inf');
+      // Turn relay on for testing (without counting)
+      sendRelayCommand(true);
+    }
+  } else if(workerMatch){
+    const workerId = workerMatch[1].trim();
+    if(!state.dieId){
+      addLog('No die loaded — cannot start worker session', 'ev-error');
+      toast('Load a die first before starting a session', 'err');
+      return;
+    }
+    if(state.workerId === workerId){
+      // Same worker → clock out
+      endWorkerSession('Worker clocked out');
+    } else {
+      // New worker → clock in
+      if(state.workerId) endWorkerSession(`New worker replaced ${state.workerId}`);
+      state.workerId    = workerId;
+      state.sessionStart= new Date();
+      state.sessionCount= 0;
+      state.testMode    = false;
+      state.counting    = true;
+      addLog(`Worker ${workerId} clocked in — counting started`, 'ev-worker');
+      toast(`${workerId} clocked in`, 'ok');
+      sendRelayCommand(true);
+    }
+  } else {
+    addLog(`Unknown tag format: ${rawTag}`, 'ev-error');
+    toast('Unknown tag format', 'err');
+  }
+  renderState();
+}
+
+function endWorkerSession(reason){
+  if(state.workerId){
+    addLog(`Session ended (${reason}) — ${state.sessionCount} parts by ${state.workerId}`, 'ev-worker');
+    toast(`${state.workerId} clocked out — ${state.sessionCount} parts`, 'inf');
+  }
+  state.workerId     = null;
+  state.sessionStart = null;
+  state.sessionCount = 0;
+  state.counting     = false;
+  state.testMode     = !!state.dieId; // back to test mode if die still in
+  sendRelayCommand(false);
+  renderState();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  API CALLS
+// ═══════════════════════════════════════════════════════════════
+function apiFetch(url, opts={}){
+  return fetch(url, opts).catch(err=>{ console.warn(url, err); return null; });
+}
+
+function sendRelayCommand(on){
+  // Only toggle if the current tracked state differs from the desired state,
+  // so repeated calls with the same value don't flip the relay back.
+  if (state.relayOn !== on) {
+    apiFetch('/relay', {method:'POST'});
+  }
+}
+
+async function toggleRelay(){
+  const r = await apiFetch('/relay',{method:'POST'});
+  if(r) toast('Relay toggled','inf');
+  else  toast('Relay command failed','err');
+}
+
+async function playSound(type){
+  await apiFetch(`/buzzer_${type}`,{method:'POST'});
+}
+
+async function flushQueue(){
+  toast('Retrying pending records…','inf');
+  // In a real build this calls a /queue/flush endpoint on the firmware
+}
+
+function clearQueue(){
+  if(!confirm('Delete all pending queued records? This data will be lost.')) return;
+  document.getElementById('queue-tbody').innerHTML=
+    '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Queue cleared</td></tr>';
+  state.pendingCount=0;
+  renderState();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  STATUS POLL
+// ═══════════════════════════════════════════════════════════════
+async function pollStatus(){
+  const r = await apiFetch('/status');
+  if(!r){ state.wifiOk=false; renderState(); return; }
+  state.wifiOk = true;
+  const d = await r.json().catch(()=>null);
+  if(!d) return;
+
+  state.relayOn = (d.relayStatus==='On');
+  if(d.tagData && d.tagData !== state.lastTag && d.tagData !== 'No tag read'){
+    handleTagScan(d.tagData);
+  }
+  renderState();
+}
+
+async function pollPressCounter(){
+  const r = await apiFetch('/press_counter');
+  if(!r) return;
+  const d = await r.json().catch(()=>null);
+  if(!d) return;
+
+  const prev = state.sessionCount;
+  if(state.counting){
+    // Derive session count from firmware count delta
+    state.sessionCount = d.count;
+    state.dieCount     += (d.count - prev > 0 ? d.count - prev : 0);
+    state.todayCount   += (d.count - prev > 0 ? d.count - prev : 0);
+  }
+  state.lastPulseTime = d.lastPulseTime * 1000;
+
+  // Rate: estimate from pulse count delta per interval
+  state.rateHistory.shift();
+  state.rateHistory.push(d.inPulseTrain ? Math.round(60000/Math.max(d.lastPulseDuration,1)) : 0);
+  updateRateBars();
+  renderState();
+}
+
+setInterval(pollStatus, 3000);
+setInterval(pollPressCounter, 2000);
+pollStatus();
+pollPressCounter();
+
+// ═══════════════════════════════════════════════════════════════
+//  NFC WRITER UI
+// ═══════════════════════════════════════════════════════════════
+function setTagType(type){
+  state.tagType=type;
+  document.getElementById('type-die').className    = 'btn btn-sm ' + (type==='die'?'btn-blue':'btn-ghost');
+  document.getElementById('type-worker').className = 'btn btn-sm ' + (type==='personnel'?'btn-blue':'btn-ghost');
+  updateTagPreview();
+}
+setTagType('die');
+
+function setPreset(type, id){
+  state.tagType=type;
+  document.getElementById('nfc-id-input').value=id;
+  setTagType(type);
+  updateTagPreview();
+}
+
+function updateTagPreview(){
+  const id = document.getElementById('nfc-id-input').value.trim();
+  const preview = id ? `${state.tagType}:${id}` : '–';
+  document.getElementById('tag-preview').textContent = preview;
+}
+
+async function writeTag(){
+  const id = document.getElementById('nfc-id-input').value.trim();
+  if(!id){ toast('Enter an ID first','err'); return; }
+  const tagText = `${state.tagType}:${id}`;
+
+  const box  = document.getElementById('nfc-status-box');
+  const txt  = document.getElementById('nfc-status-text');
+  box.className='nfc-status-box waiting';
+  txt.textContent = `Waiting for tag… will write: ${tagText}`;
+
+  const fd = new FormData();
+  fd.append('tagText', tagText);
+  const r = await apiFetch('/write_tag',{method:'POST',body:fd});
+  if(!r){
+    box.className='nfc-status-box';
+    txt.textContent='Write request failed — check connection';
+    toast('Write failed','err');
+    return;
+  }
+  txt.textContent=`Present tag to reader now — will write: ${tagText}`;
+  addLog(`NFC write queued: ${tagText}`,'ev-info');
+
+  // Poll for confirmation
+  let tries=0;
+  const check=setInterval(async()=>{
+    const sr=await apiFetch('/status');
+    if(!sr){ clearInterval(check); return; }
+    const sd=await sr.json().catch(()=>null);
+    if(sd && sd.tagData===tagText){
+      clearInterval(check);
+      box.className='nfc-status-box success';
+      txt.textContent=`✓ Written successfully: ${tagText}`;
+      toast(`Tag written: ${tagText}`,'ok');
+      addLog(`NFC write success: ${tagText}`,'ev-info');
+    }
+    if(++tries>20){ clearInterval(check); box.className='nfc-status-box'; txt.textContent='Timed out — try again'; }
+  }, 1500);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  QUEUE TABLE
+// ═══════════════════════════════════════════════════════════════
+function refreshQueue(){
+  // In a real build this fetches /queue from firmware
+  // For now show the state we already track
+  const tbody = document.getElementById('queue-tbody');
+  if(state.pendingCount===0){
+    tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Queue empty — all data sent</td></tr>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SETTINGS
+// ═══════════════════════════════════════════════════════════════
+function selectBackend(be){
+  state.backend=be;
+  // Map button suffix → backend value (influx button uses value 'influxdb')
+  const keyMap = {influx:'influxdb', mqtt:'mqtt', both:'both'};
+  ['influx','mqtt','both'].forEach(k=>{
+    document.getElementById('be-'+k).className='backend-opt'+(keyMap[k]===be?' active':'');
+  });
+  document.getElementById('bs-influx').className='backend-section'+(be!=='mqtt'?' visible':'');
+  document.getElementById('bs-mqtt').className='backend-section'+(be!=='influxdb'?' visible':'');
+  renderState();
+}
+
+async function loadSettings(){
+  const r = await apiFetch('/save');
+  if(!r){ toast('Could not reach device','err'); return; }
+  const d = await r.json().catch(()=>null);
+  if(!d) return;
+  document.getElementById('device').value           = d.device         || '';
+  document.getElementById('influxHost').value       = d.influxHost      || '';
+  document.getElementById('influxPort').value       = d.influxPort      || 8086;
+  document.getElementById('influxBucket').value     = d.influxBucket    || '';
+  document.getElementById('influxOrg').value        = d.influxOrg       || '';
+  document.getElementById('minPulseDuration').value = d.minPulseDuration|| 10;
+  if(d.mqttHost)  document.getElementById('mqttHost').value  = d.mqttHost;
+  if(d.mqttPort)  document.getElementById('mqttPort').value  = d.mqttPort;
+  if(d.mqttTopic) document.getElementById('mqttTopic').value = d.mqttTopic;
+  if(d.mqttClient)document.getElementById('mqttClient').value= d.mqttClient;
+  if(d.backend)   selectBackend(d.backend);
+  toast('Settings loaded','ok');
+}
+
+async function saveSettings(){
+  const fd=new FormData();
+  fd.append('device',           document.getElementById('device').value);
+  fd.append('influxHost',       document.getElementById('influxHost').value);
+  fd.append('influxPort',       document.getElementById('influxPort').value);
+  fd.append('influxBucket',     document.getElementById('influxBucket').value);
+  fd.append('influxOrg',        document.getElementById('influxOrg').value);
+  const tok = document.getElementById('influxToken').value;
+  if(tok) fd.append('influxToken', tok);
+  fd.append('minPulseDuration', document.getElementById('minPulseDuration').value);
+  fd.append('mqttHost',         document.getElementById('mqttHost').value);
+  fd.append('mqttPort',         document.getElementById('mqttPort').value);
+  fd.append('mqttTopic',        document.getElementById('mqttTopic').value);
+  fd.append('mqttClient',       document.getElementById('mqttClient').value);
+  fd.append('mqttUser',         document.getElementById('mqttUser').value);
+  fd.append('mqttPass',         document.getElementById('mqttPass').value);
+  fd.append('backend',          state.backend);
+
+  const r = await apiFetch('/save',{method:'POST',body:fd});
+  if(r && r.ok){ toast('Settings saved','ok'); document.getElementById('influxToken').value=''; }
+  else toast('Save failed','err');
+}
+
+async function saveDeviceSettings(){
+  const fd=new FormData();
+  fd.append('device',           document.getElementById('device').value);
+  fd.append('minPulseDuration', document.getElementById('minPulseDuration').value);
+  const r = await apiFetch('/save',{method:'POST',body:fd});
+  if(r && r.ok) toast('Device settings saved','ok');
+  else toast('Save failed','err');
+}
+
+async function saveOta(){
+  const pass = document.getElementById('otaPass').value;
+  if(!pass){ toast('Enter a password','err'); return; }
+  const fd=new FormData();
+  fd.append('otaPass',pass);
+  const r=await apiFetch('/save',{method:'POST',body:fd});
+  if(r&&r.ok){ toast('OTA password updated','ok'); document.getElementById('otaPass').value=''; }
+  else toast('Failed','err');
+}
+
+async function testConnection(){
+  toast('Testing connection…','inf');
+  const r=await apiFetch('/status');
+  if(r){ toast('Device reachable ✓','ok'); state.wifiOk=true; }
+  else  { toast('Device not reachable','err'); state.wifiOk=false; }
+  renderState();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FIRMWARE / FILE UPLOAD
+// ═══════════════════════════════════════════════════════════════
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e=>{ e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', ()=>dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e=>{
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  const f=e.dataTransfer.files[0];
+  if(f) uploadHtmlFile(f);
+});
+
+function uploadHtml(input){
+  if(input.files[0]) uploadHtmlFile(input.files[0]);
+}
+
+async function uploadHtmlFile(file){
+  const bar   = document.getElementById('upload-bar');
+  const prog  = document.getElementById('upload-progress');
+  const label = document.getElementById('upload-label');
+  prog.style.display='block';
+  label.textContent='Uploading…';
+  bar.style.width='0%';
+
+  const fd=new FormData();
+  fd.append('htmlFile',file);
+
+  const xhr=new XMLHttpRequest();
+  xhr.open('POST','/upload');
+  xhr.upload.onprogress=e=>{
+    const pct=Math.round(e.loaded/e.total*100);
+    bar.style.width=pct+'%';
+    label.textContent=`Uploading… ${pct}%`;
+  };
+  xhr.onload=()=>{
+    label.textContent='Upload complete — reloading…';
+    toast('Interface uploaded — reloading','ok');
+    addLog('Web interface updated via upload','ev-info');
+    setTimeout(()=>location.reload(), 2500);
+  };
+  xhr.onerror=()=>{ label.textContent='Upload failed'; toast('Upload failed','err'); };
+  xhr.send(fd);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════
+loadSettings();
+renderState();
+updateRateBars();
+</script>
 </body>
 </html>

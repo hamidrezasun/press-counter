@@ -1,141 +1,111 @@
 #include "NfcManager.h"
-#include "WebServerManager.h"
-#include "ControlManager.h"
-#include "InfluxDB.h"
-#include "PressCounter.h"  // Add include
-#include <Arduino.h>
 
-NfcManager::NfcManager() : mfrc522(CS_PIN, -1), nfc(&mfrc522), pendingTagWrite(false) {
-  lastTagData[0] = '\0';
-  pendingTagData[0] = '\0';
-}
+NfcManager::NfcManager() : _rc522(NFC_SS_PIN, -1), _nfc(&_rc522) {}
 
 bool NfcManager::begin() {
   SPI.begin();
-  mfrc522.PCD_Init();
-  nfc.begin();
-  byte v = mfrc522.PCD_ReadRegister(mfrc522.VersionReg);
-  return (v != 0x00 && v != 0xFF && mfrc522.PCD_PerformSelfTest());
+  _rc522.PCD_Init();
+  _nfc.begin();
+  const byte v = _rc522.PCD_ReadRegister(MFRC522::VersionReg);
+  Serial.printf("[NFC] RC522 version register 0x%02X\n", v);
+  return v != 0x00 && v != 0xFF;                 // 0x00/0xFF = no chip answering on SPI
 }
 
-const char* NfcManager::readTag() {
-  NfcTag tag = nfc.read();
-  String uid = tag.getUidString();
-  //strlcpy(lastTagData, uid.c_str(), MAX_TAG_DATA_LENGTH);    
-  if (tag.hasNdefMessage()) {
-    NdefMessage message = tag.getNdefMessage();
-    int recordCount = message.getRecordCount();
-    for (int i = 0; i < recordCount; i++) {
-      NdefRecord record = message.getRecord(i);
-      if (record.getTnf() == 0x01 && record.getTypeLength() == 1 && record.getType()[0] == 'T') {
-        const byte* payload = record.getPayload();
-        int payloadLength = record.getPayloadLength();
-        if (payloadLength > 0) {
-          byte status = payload[0];
-          int languageCodeLength = status & 0x3F;
-          if (payloadLength > 1 + languageCodeLength) {
-            char text[64] = {0};
-            for (int j = 1 + languageCodeLength; j < payloadLength; j++) {
-              text[j - 1 - languageCodeLength] = (char)payload[j];
-            }
-            strlcpy(lastTagData, text, MAX_TAG_DATA_LENGTH);
-          }
-        }
-      }
-    }
-  }
-  return lastTagData;
-}
-bool NfcManager::writeTag(const char* text) {
-  // Reset the reader to ensure clean state
-  mfrc522.PCD_Reset();
-  mfrc522.PCD_Init();
-  
-  // Multiple attempts to detect tag
-  for (int i = 0; i < 5; i++) {
-    Serial.print("Attempting to write: ");
-    Serial.println(text);
-    
-    NdefMessage message = NdefMessage();
-    message.addTextRecord(text);
-    bool success = nfc.write(message);
-    
-    if (success) {
-      Serial.println("Successfully wrote data on Tag");
-      strlcpy(lastTagData, text, MAX_TAG_DATA_LENGTH);
-      return true;
-    } else {
-      Serial.println("Failed to write to tag");
-      // Reset and try again
-      mfrc522.PCD_Reset();
-      mfrc522.PCD_Init();
-      delay(100);
-    }
+bool NfcManager::readText(char* out, size_t outSize) {
+  NfcTag tag = _nfc.read();
+  if (!tag.hasNdefMessage()) return false;
+
+  NdefMessage message = tag.getNdefMessage();
+  for (int i = 0; i < message.getRecordCount(); i++) {
+    NdefRecord rec = message.getRecord(i);
+    // well-known Text record: TNF 0x01, type "T"
+    if (rec.getTnf() != 0x01 || rec.getTypeLength() != 1 || rec.getType()[0] != 'T') continue;
+
+    const byte* payload = rec.getPayload();
+    const int len = rec.getPayloadLength();
+    if (len < 2) continue;
+    const int textStart = 1 + (payload[0] & 0x3F);          // status byte + language code
+    if (len <= textStart) continue;
+
+    size_t n = (size_t)(len - textStart);
+    if (n >= outSize) n = outSize - 1;
+    memcpy(out, payload + textStart, n);
+    out[n] = '\0';
+    return n > 0;
   }
   return false;
 }
 
-const char* NfcManager::getLastTagData() const {
-  return lastTagData;
+bool NfcManager::writeText(const char* text) {
+  for (int attempt = 1; attempt <= 5; attempt++) {
+    NdefMessage message;
+    message.addTextRecord(text);
+    if (_nfc.write(message)) return true;
+    Serial.printf("[NFC] write attempt %d failed\n", attempt);
+    _rc522.PCD_Init();
+    delay(50);
+  }
+  return false;
 }
 
 void NfcManager::setPendingWrite(const char* text) {
-  strlcpy(pendingTagData, text, MAX_TAG_DATA_LENGTH);
-  pendingTagWrite = true;
-  Serial.print("Attemt to write: ");
-  Serial.println(text);
+  strlcpy(_pendingText, text, sizeof(_pendingText));
+  _pendingWrite = true;
+  _pendingSince = millis();
+  Serial.printf("[NFC] write queued: %s\n", _pendingText);
 }
 
-bool NfcManager::handleNfcLoop(WebServerManager& webManager, ControlManager& controlManager, 
-                              InfluxDB& influxDB, PressCounter& pressCounter) {  // Add PressCounter parameter
-  bool result = false;
-  
-  // Handle pending write first (highest priority)
-  if (pendingTagWrite && nfc.tagPresent()) {
-    if (writeTag(pendingTagData)) {
-      pendingTagWrite = false;
-      pendingTagData[0] = '\0';
-      result = true;
-      controlManager.setRelayState(true, true);
-      controlManager.playSuccessSound();
-      pressCounter.reset();  // Reset press counter on successful write
+void NfcManager::handle(ControlManager& ctrl, InfluxDB& influx, PressCounter& press) {
+  const unsigned long now = millis();
+  if (now - _lastPoll < NFC_POLL_MS) return;
+  _lastPoll = now;
+
+  if (_pendingWrite && now - _pendingSince > PENDING_WRITE_TIMEOUT_MS) {
+    _pendingWrite = false;                       // never overwrite an operator's card long after the web request
+    Serial.println("[NFC] pending write expired");
+    ctrl.playWarningSound();
+  }
+  if (now < _cooldownUntil) return;
+  if (!_nfc.tagPresent()) return;
+
+  // ── write path ──────────────────────────────────────────────────────────────
+  if (_pendingWrite) {
+    _pendingWrite = false;
+    if (writeText(_pendingText)) {
+      strlcpy(_lastTag, _pendingText, sizeof(_lastTag));
+      ctrl.playSuccessSound();                   // writing a card must NOT switch the machine
     } else {
-      Serial.println("Write failed");
-      pendingTagWrite = false;
-      pendingTagData[0] = '\0';
-      result = false;
+      ctrl.playErrorSound();
     }
-  } else if (!pendingTagWrite && nfc.tagPresent()) {
-    // Read tag
-    const char* currentTag = readTag();
-    bool hasTagData = (strlen(currentTag) > 0);
-    if (hasTagData) {
-      result = true;
-      Serial.print("Tag Data: ");
-      Serial.println(currentTag);
-      controlManager.setRelayState(true, true);
-      controlManager.playSuccessSound(1500);
-      
-      // Reset press counter when tag is detected
-      pressCounter.reset();
-      
-      // Send tag data and relay status to InfluxDB
-      DeviceStatus status = controlManager.getStatus();
-      char fields[256];
-      snprintf(fields, sizeof(fields), "tag_data=\"%s\",relay_state=%s", 
-               currentTag, status.relayOn ? "true" : "false");
-      influxDB.sendData("nfc_event", fields);
-    }
+    _cooldownUntil = millis() + TAG_COOLDOWN_MS;
+    return;
   }
-  // Handle web updates
-  if (result || strlen(getLastTagData()) > 0) {
-    webManager.updateStatus();
+
+  // ── read path ───────────────────────────────────────────────────────────────
+  char text[MAX_TAG_DATA_LENGTH];
+  _cooldownUntil = millis() + TAG_COOLDOWN_MS;
+  if (!readText(text, sizeof(text))) {
+    ctrl.playErrorSound();                       // blank / unreadable / not NDEF text
+    return;
   }
-  
-  return result;
-}
+  strlcpy(_lastTag, text, sizeof(_lastTag));
+  Serial.printf("[NFC] tag: %s\n", text);
 
+  if (strncmp(text, "personnel:", 10) == 0) {
+    ctrl.toggleRelay("personnel tag");
+    press.reset();
+    ctrl.playSuccessSound();
+  } else if (strncmp(text, "die:", 4) == 0) {
+    ctrl.playSuccessSound();                     // die card only identifies the tool
+  } else {
+    ctrl.playWarningSound();                     // unknown format: log it, change nothing
+  }
 
-bool NfcManager::isPendingWrite() const {
-  return pendingTagWrite;
+  // log the event with the relay state AFTER handling (analyzer starts/ends sessions from this)
+  String esc = text;
+  esc.replace("\\", "\\\\");
+  esc.replace("\"", "\\\"");
+  char fields[MAX_TAG_DATA_LENGTH + 48];
+  snprintf(fields, sizeof(fields), "tag_data=\"%s\",relay_state=%s", esc.c_str(), ctrl.relayOn() ? "true" : "false");
+  influx.sendData("nfc_event", fields);
 }

@@ -1,0 +1,15 @@
+freerouting finished in 31s rc=0
+	at sun.nio.ch.SocketChannelImpl.connect(Unknown Source) ~[?:?]
+	at java.nio.channels.SocketChannel.open(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl$Initializer$LoopbackConnector.run(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl$Initializer.run(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl$Initializer.run(Unknown Source) ~[?:?]
+	at java.security.AccessController.doPrivileged(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl.<init>(Unknown Source) ~[?:?]
+	at sun.nio.ch.WEPollSelectorImpl.<init>(Unknown Source) ~[?:?]
+	at sun.nio.ch.WEPollSelectorProvider.openSelector(Unknown Source) ~[?:?]
+	at java.nio.channels.Selector.open(Unknown Source) ~[?:?]
+	at jdk.internal.net.http.HttpClientImpl$SelectorManager.<init>(Unknown Source) ~[java.net.http:?]
+	... 6 more
+SES import True
+tracks 271 vias 12 -> D:\Nextcloud2\project\press counter\hardware\panel\press_counter_panel.kicad_pcb

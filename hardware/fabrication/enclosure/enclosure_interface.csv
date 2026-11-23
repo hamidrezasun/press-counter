@@ -1,0 +1,29 @@
+﻿kind,name,x_mm,y_mm,w_mm,h_mm,note
+hole,MH1,4.0,4.0,3.2,3.2,M3 mounting hole / standoff
+hole,MH2,198.0,4.0,3.2,3.2,M3 mounting hole / standoff
+hole,MH3,4.0,100.0,3.2,3.2,M3 mounting hole / standoff
+hole,MH4,198.0,100.0,3.2,3.2,M3 mounting hole / standoff
+hole,MH5,150.5,4.0,3.2,3.2,M3 mounting hole / standoff
+hole,MH6,150.5,100.0,3.2,3.2,M3 mounting hole / standoff
+button,SW1 CALL SUPERVISOR,77.0,50.0,5.0,5.0,"plunger hole 5 mm, stem 3.5 mm; use a plastic cap, switch top is 5 mm above the PCB"
+button,SW2 CALL NET,98.0,50.0,5.0,5.0,same
+light,D2 red ALARM LED,85.5,47.0,2.0,2.0,"0805 LED, light pipe 2 mm, 1-2 mm above the PCB"
+light,D13 green ON LED,89.5,47.0,2.0,2.0,"0805 LED, light pipe 2 mm, 1-2 mm above the PCB"
+light,D6 green PWR LED,76.5,28.0,2.0,2.0,"0805 LED, light pipe 2 mm, 1-2 mm above the PCB"
+light,D5 red mains-present LED,47.0,56.0,2.0,2.0,"OPTIONAL window: it is a 230 V area, keep the cover closed, a light pipe must be insulating"
+opening,J3 USB micro-B,88.0,104.0,12.0,5.0,slot at the bottom edge for the plug (service port); a plug cap or screw cover in operation
+area,RC522 tag read area,109.0,58.5,40.0,38.0,"no cutout needed: front plastic <= 3 mm, no metal / foil / magnet within 15 mm in front of it"
+area,RC522 module outline,109.0,35.5,40.0,60.0,"module 40 x 60 mm, 8-pin header at its top edge (P1)"
+window,OLED display window (estimate),117.8,13.0,24.0,13.0,"active area 21.7 x 10.9 mm + margin; position estimated, verify with the real module"
+area,OLED module outline (estimate),116.1,2.7,27.4,27.8,typical 0.96in module 27.3 x 27.8 mm
+cable,"J1 mains in (L, N)",6.0,20.0,0,0,"wire entry from the left edge; screw terminal, 5.08 mm pitch (the board edge is the enclosure wall: use a gland / slot beside it)"
+cable,J2 press sense 230 V,6.0,52.0,0,0,"wire entry from the left edge; screw terminal, 5.08 mm pitch (the board edge is the enclosure wall: use a gland / slot beside it)"
+cable,"J5 relay K1 contact (NO, COM, NC)",6.0,79.0,0,0,"wire entry from the left edge; screw terminal, 5.08 mm pitch (the board edge is the enclosure wall: use a gland / slot beside it)"
+cable,J6 5 V DC in,57.5,6.0,0,0,"wire entry from the top edge; screw terminal, 5.08 mm pitch (the board edge is the enclosure wall: use a gland / slot beside it)"
+cable,J4 DS18B20 probe,64.0,98.0,0,0,"wire entry from the bottom edge; screw terminal, 5.08 mm pitch (the board edge is the enclosure wall: use a gland / slot beside it)"
+cable,J7 12/24 V sense,157.0,98.0,0,0,"wire entry from the bottom edge; screw terminal, 5.08 mm pitch (the board edge is the enclosure wall: use a gland / slot beside it)"
+cable,J9 AUX,170.0,98.0,0,0,"wire entry from the bottom edge; screw terminal, 5.08 mm pitch (the board edge is the enclosure wall: use a gland / slot beside it)"
+cable,"J10 OUT1 (NO, COM, NC)",194.9,22.55,0,0,"wire entry from the right edge; screw terminal, 5.08 mm pitch (the board edge is the enclosure wall: use a gland / slot beside it)"
+cable,J11 OUT2,194.9,44.55,0,0,"wire entry from the right edge; screw terminal, 5.08 mm pitch (the board edge is the enclosure wall: use a gland / slot beside it)"
+cable,J12 OUT3,194.9,66.55,0,0,"wire entry from the right edge; screw terminal, 5.08 mm pitch (the board edge is the enclosure wall: use a gland / slot beside it)"
+cable,J13 OUT4,194.9,88.55,0,0,"wire entry from the right edge; screw terminal, 5.08 mm pitch (the board edge is the enclosure wall: use a gland / slot beside it)"

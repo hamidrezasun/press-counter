@@ -1,0 +1,12 @@
+board 202.1 x 104.1 mm, 230 holes
+  12 x 0.30 mm  component
+ 125 x 0.30 mm  via
+   2 x 0.55 mm  component
+   4 x 0.60 mm  component
+   2 x 0.80 mm  mounting hole
+   2 x 0.85 mm  component
+  30 x 1.00 mm  component
+   2 x 1.20 mm  component
+  43 x 1.30 mm  component
+   2 x 2.40 x 1.30 (slot) mm  component
+   6 x 3.20 mm  mounting hole

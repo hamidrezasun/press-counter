@@ -1,0 +1,80 @@
+2026-10-07 14:44:36.119 [main] INFO  Freerouting v1.9.0 (build-date: 2023-10-30)
+2026-10-07 14:44:36.281 [main] INFO  Settings were loaded from freerouting.json
+2026-10-07 14:44:39.456 [main] INFO  Opening 'D:\Nextcloud2\project\press counter\hardware\panel\fr\in.dsn'...
+2026-10-07 14:44:39.558 [Thread-3] ERROR java.io.IOException: Unable to establish loopback connection
+java.io.UncheckedIOException: java.io.IOException: Unable to establish loopback connection
+	at jdk.internal.net.http.HttpClientImpl.<init>(Unknown Source) ~[java.net.http:?]
+	at jdk.internal.net.http.HttpClientImpl.create(Unknown Source) ~[java.net.http:?]
+	at jdk.internal.net.http.HttpClientBuilderImpl.build(Unknown Source) ~[java.net.http:?]
+	at java.net.http.HttpClient.newHttpClient(Unknown Source) ~[java.net.http:?]
+	at app.freerouting.management.VersionChecker.run(VersionChecker.java:23) ~[freerouting-1.9.0.jar:unspecified]
+	at java.lang.Thread.run(Unknown Source) [?:?]
+Caused by: java.io.IOException: Unable to establish loopback connection
+	at sun.nio.ch.PipeImpl$Initializer.run(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl$Initializer.run(Unknown Source) ~[?:?]
+	at java.security.AccessController.doPrivileged(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl.<init>(Unknown Source) ~[?:?]
+	at sun.nio.ch.WEPollSelectorImpl.<init>(Unknown Source) ~[?:?]
+	at sun.nio.ch.WEPollSelectorProvider.openSelector(Unknown Source) ~[?:?]
+	at java.nio.channels.Selector.open(Unknown Source) ~[?:?]
+	at jdk.internal.net.http.HttpClientImpl$SelectorManager.<init>(Unknown Source) ~[java.net.http:?]
+	... 6 more
+Caused by: java.net.SocketException: Invalid argument: connect
+	at sun.nio.ch.UnixDomainSockets.connect0(Native Method) ~[?:?]
+	at sun.nio.ch.UnixDomainSockets.connect(Unknown Source) ~[?:?]
+	at sun.nio.ch.UnixDomainSockets.connect(Unknown Source) ~[?:?]
+	at sun.nio.ch.SocketChannelImpl.connect(Unknown Source) ~[?:?]
+	at java.nio.channels.SocketChannel.open(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl$Initializer$LoopbackConnector.run(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl$Initializer.run(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl$Initializer.run(Unknown Source) ~[?:?]
+	at java.security.AccessController.doPrivileged(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl.<init>(Unknown Source) ~[?:?]
+	at sun.nio.ch.WEPollSelectorImpl.<init>(Unknown Source) ~[?:?]
+	at sun.nio.ch.WEPollSelectorProvider.openSelector(Unknown Source) ~[?:?]
+	at java.nio.channels.Selector.open(Unknown Source) ~[?:?]
+	at jdk.internal.net.http.HttpClientImpl$SelectorManager.<init>(Unknown Source) ~[java.net.http:?]
+	... 6 more
+2026-10-07 14:44:44.309 [Thread-24] INFO  Starting auto-routing...
+2026-10-07 14:44:54.662 [Thread-24] WARN  There were only 4.45 changes in the last 20 passes, so it's very likely that autorouter can't improve the result much further. It is recommended to stop it and finish the board manually.
+2026-10-07 14:44:58.701 [Thread-24] WARN  There were only 2.30 changes in the last 40 passes, so it's very likely that autorouter can't improve the result much further. It is recommended to stop it and finish the board manually.
+2026-10-07 14:45:01.996 [Thread-24] INFO  Auto-routing was completed in 17.68 seconds.
+2026-10-07 14:45:02.104 [Thread-24] INFO  Starting route optimization on 1 thread...
+2026-10-07 14:45:04.469 [Thread-24] INFO  Route optimization was completed in 2.36 seconds.
+2026-10-07 14:45:04.492 [Thread-24] INFO  Saving 'D:\Nextcloud2\project\press counter\hardware\panel\fr\out.ses'...
+
+WARNING: Runtime environment or build system does not support multi-release JARs. This will impact location-based features.
+2026-10-07 14:44:39.558 [Thread-3] ERROR java.io.IOException: Unable to establish loopback connection
+java.io.UncheckedIOException: java.io.IOException: Unable to establish loopback connection
+	at jdk.internal.net.http.HttpClientImpl.<init>(Unknown Source) ~[java.net.http:?]
+	at jdk.internal.net.http.HttpClientImpl.create(Unknown Source) ~[java.net.http:?]
+	at jdk.internal.net.http.HttpClientBuilderImpl.build(Unknown Source) ~[java.net.http:?]
+	at java.net.http.HttpClient.newHttpClient(Unknown Source) ~[java.net.http:?]
+	at app.freerouting.management.VersionChecker.run(VersionChecker.java:23) ~[freerouting-1.9.0.jar:unspecified]
+	at java.lang.Thread.run(Unknown Source) [?:?]
+Caused by: java.io.IOException: Unable to establish loopback connection
+	at sun.nio.ch.PipeImpl$Initializer.run(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl$Initializer.run(Unknown Source) ~[?:?]
+	at java.security.AccessController.doPrivileged(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl.<init>(Unknown Source) ~[?:?]
+	at sun.nio.ch.WEPollSelectorImpl.<init>(Unknown Source) ~[?:?]
+	at sun.nio.ch.WEPollSelectorProvider.openSelector(Unknown Source) ~[?:?]
+	at java.nio.channels.Selector.open(Unknown Source) ~[?:?]
+	at jdk.internal.net.http.HttpClientImpl$SelectorManager.<init>(Unknown Source) ~[java.net.http:?]
+	... 6 more
+Caused by: java.net.SocketException: Invalid argument: connect
+	at sun.nio.ch.UnixDomainSockets.connect0(Native Method) ~[?:?]
+	at sun.nio.ch.UnixDomainSockets.connect(Unknown Source) ~[?:?]
+	at sun.nio.ch.UnixDomainSockets.connect(Unknown Source) ~[?:?]
+	at sun.nio.ch.SocketChannelImpl.connect(Unknown Source) ~[?:?]
+	at java.nio.channels.SocketChannel.open(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl$Initializer$LoopbackConnector.run(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl$Initializer.run(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl$Initializer.run(Unknown Source) ~[?:?]
+	at java.security.AccessController.doPrivileged(Unknown Source) ~[?:?]
+	at sun.nio.ch.PipeImpl.<init>(Unknown Source) ~[?:?]
+	at sun.nio.ch.WEPollSelectorImpl.<init>(Unknown Source) ~[?:?]
+	at sun.nio.ch.WEPollSelectorProvider.openSelector(Unknown Source) ~[?:?]
+	at java.nio.channels.Selector.open(Unknown Source) ~[?:?]
+	at jdk.internal.net.http.HttpClientImpl$SelectorManager.<init>(Unknown Source) ~[java.net.http:?]
+	... 6 more

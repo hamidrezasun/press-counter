@@ -1,0 +1,64 @@
+** Drc report for press_counter_main.kicad_pcb **
+** Created on 2026-10-11T14:59:46 **
+** Report includes: Errors, Warnings, Exclusions **
+
+** Found 13 DRC violations **
+[track_dangling]: Track has unconnected end
+    Local override; warning
+    @(68.0500 mm, 107.9500 mm): Track [+5V] on F.Cu, length 6.0000 mm
+[via_dangling]: Via is not connected or connected on only one layer
+    Local override; warning
+    @(124.5500 mm, 89.9475 mm): Via [+3V3] on F.Cu - B.Cu
+[track_dangling]: Track has unconnected end
+    Local override; warning
+    @(68.0500 mm, 121.9500 mm): Track [RLY_N] on F.Cu, length 6.0000 mm
+[text_height]: Text height out of range (board setup constraints silk text height min height 0.7000 mm; actual 0.6000 mm)
+    Rule: board setup constraints silk text height; warning
+    @(132.5000 mm, 123.4000 mm): PCB text 'STM BOOT' on F.Silkscreen
+[text_height]: Text height out of range (board setup constraints silk text height min height 0.7000 mm; actual 0.6000 mm)
+    Rule: board setup constraints silk text height; warning
+    @(132.5000 mm, 131.9000 mm): PCB text 'STM RESET' on F.Silkscreen
+[text_height]: Text height out of range (board setup constraints silk text height min height 0.7000 mm; actual 0.6000 mm)
+    Rule: board setup constraints silk text height; warning
+    @(165.0000 mm, 62.0000 mm): PCB text 'SWD' on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: board setup constraints silk; warning
+    @(95.5000 mm, 95.5750 mm): Reference field of Q7
+    @(95.2729 mm, 95.2350 mm): Segment of R94 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: board setup constraints silk; warning
+    @(132.5000 mm, 123.5750 mm): Reference field of SW3
+    @(132.5000 mm, 123.4000 mm): PCB text 'STM BOOT' on F.Silkscreen
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(100.5000 mm, 95.5750 mm): Reference field of Q8
+    @(100.4125 mm, 94.5000 mm): Pad 2 [PROG_QB1] of R95 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(95.5000 mm, 95.5750 mm): Reference field of Q7
+    @(96.4125 mm, 94.5000 mm): Pad 2 [PROG_QB0] of R94 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(95.5000 mm, 95.5750 mm): Reference field of Q7
+    @(94.5875 mm, 94.5000 mm): Pad 1 [USB_RTS] of R94 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(109.5000 mm, 111.5750 mm): Reference field of C26
+    @(109.5000 mm, 111.4500 mm): Pad 1 [CH_XI] of C25 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(165.0000 mm, 66.4000 mm): Reference field of J9
+    @(165.0000 mm, 66.5400 mm): PTH pad 2 [SWCLK] of J9
+
+** Found 0 unconnected pads **
+
+** Found 0 Footprint errors **
+
+** Ignored checks **
+    - Footprint has no courtyard defined
+    - Track endpoint not centered on via
+    - Tuning profile track geometries
+    - Footprint doesn't match symbol's footprint filters
+    - Footprint component type doesn't match footprint pads
+
+** End of Report **
