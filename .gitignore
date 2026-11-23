@@ -36,3 +36,6 @@ firmware/build/
 # bench build (ESP32-S3 target)
 firmware/press_counter/build_s3/
 firmware/press_counter/build/
+
+# EasyEDA binary project (contains UUIDs that trip GitHub secret scanning; KiCad project is the source of truth)
+press counter pcb.eprj
