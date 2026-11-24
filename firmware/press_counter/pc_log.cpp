@@ -17,7 +17,9 @@ void log(const char* fmt, ...) {
   vsnprintf(text, sizeof(text), fmt, ap);
   va_end(ap);
   snprintf(g_log[g_head], LOG_LINE_LEN, "%lu %s", (unsigned long)(millis() / 1000UL), text);
+#ifndef PC_NO_CONSOLE
   Serial.println(g_log[g_head]);
+#endif
   g_head = (g_head + 1) % LOG_LINES;
   if (g_count < LOG_LINES) g_count++;
 }

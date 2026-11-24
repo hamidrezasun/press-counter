@@ -105,9 +105,16 @@ void run(Print& o, char* cmd) {
 
 namespace shell {
 
-void begin() { Serial.begin(CONSOLE_BAUD); }
+void begin() {
+#ifndef PC_NO_CONSOLE
+  Serial.begin(CONSOLE_BAUD);
+#endif
+}
 
 void poll() {
+#ifdef PC_NO_CONSOLE
+  return;
+#endif
   int guard = 64;
   while (guard-- && Serial.available() > 0) {
     const int ch = Serial.read();

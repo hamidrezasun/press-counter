@@ -31,6 +31,13 @@
 #include "pc_update.h"
 #include "pc_web.h"
 
+#ifdef PC_BENCH_DEBUG
+#include <esp_rom_sys.h>
+#define PC_DBG(s) do { ets_printf("DBG %s\n", s); } while (0)
+#else
+#define PC_DBG(s) do {} while (0)
+#endif
+
 namespace {
 uint32_t g_tempAt = 0, g_statusAt = 0, g_infoAt = 0, g_flushAt = 0;
 
@@ -58,32 +65,50 @@ const char* resetText(esp_reset_reason_t r) {
 }  // namespace
 
 void setup() {
+  PC_DBG("setup start");
   io::begin();                                              // relay OFF first, whatever happens next
+  PC_DBG("io ok");
   outputs::begin();                                         // output relays OFF as well
+  PC_DBG("outputs ok");
   shell::begin();
+  PC_DBG("shell ok");
   const bool settingsOk = store::begin();
+  PC_DBG("store ok");
   err::begin();
+  PC_DBG("err ok");
   events::begin();
+  PC_DBG("events ok");
   const esp_reset_reason_t rr = esp_reset_reason();
   plog::log("press counter %s starting, reset: %s", PC_FW_VERSION_STR, resetText(rr));
   if (!settingsOk) { err::latch(pc::ERR_SETTINGS); store::save(); }
   if (rr == ESP_RST_PANIC || rr == ESP_RST_INT_WDT || rr == ESP_RST_TASK_WDT || rr == ESP_RST_WDT) err::latch(pc::ERR_WATCHDOG, (uint16_t)rr);
 
   buttons::begin();
+  PC_DBG("buttons ok");
   ui::begin();
+  PC_DBG("ui ok");
   temp::begin();
+  PC_DBG("temp ok");
   sense::begin();                                           // 12/24 V and AUX inputs (ADC1)
+  PC_DBG("sense ok");
   press::begin();
+  PC_DBG("press ok");
   press::onStroke(onStroke);
   session::begin();
+  PC_DBG("session ok");
   nfc::onTag(onTag);
   const bool rfid = nfc::begin();
+  PC_DBG("nfc ok");
   plog::log("RC522 reader %s", rfid ? "ok" : "MISSING (E01)");
 
   net::begin();
+  PC_DBG("net ok");
   mqtt::begin();
+  PC_DBG("mqtt ok");
   web::begin();
+  PC_DBG("web ok");
   fwupd::begin();
+  PC_DBG("fwupd ok");
 
   // task watchdog on the loop: a hang restarts the board (the relay drops = machine stops, which is the safe state)
   esp_task_wdt_config_t wdt = {};
