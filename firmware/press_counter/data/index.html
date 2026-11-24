@@ -5,37 +5,67 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Press counter</title>
 <style>
-:root{--bg:#f4f5f7;--card:#fff;--fg:#1d2330;--mut:#6b7385;--line:#dfe3ea;--acc:#1f6feb;--ok:#1a7f37;--warn:#b7791f;--err:#c62828}
-@media(prefers-color-scheme:dark){:root{--bg:#10141b;--card:#181e28;--fg:#e6e9ef;--mut:#8f98ab;--line:#2a3342;--acc:#5b9dff;--ok:#3fb950;--warn:#d9a441;--err:#ff6b6b}}
+:root{--bg:#05060b;--card:rgba(255,255,255,.05);--fg:#eef2ff;--mut:#8b93b0;--line:rgba(255,255,255,.10);--acc:#7c9cff;--ok:#34e2a0;--warn:#ffc65c;--err:#ff6b81;--grad:linear-gradient(120deg,#34e2a0,#7c9cff 48%,#c084fc)}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--line)}
-header h1{font-size:17px;margin:0;flex:1 1 auto}
-.pill{font-size:12px;padding:2px 9px;border-radius:99px;border:1px solid var(--line);color:var(--mut)}
-.pill.ok{color:var(--ok);border-color:var(--ok)}.pill.bad{color:var(--err);border-color:var(--err)}.pill.warn{color:var(--warn);border-color:var(--warn)}
-nav{display:flex;gap:4px;padding:8px 12px 0;overflow-x:auto}
-nav button{border:0;background:none;color:var(--mut);padding:8px 14px;border-bottom:2px solid transparent;font:inherit;cursor:pointer}
-nav button.on{color:var(--fg);border-color:var(--acc)}
-main{max-width:980px;margin:0 auto;padding:12px 16px 40px}
-section{display:none}section.on{display:block}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0}
-.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin:0 0 10px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-.kv small{display:block;color:var(--mut);font-size:12px}.kv b{font-size:22px;font-weight:600}.kv b.s{font-size:16px}
-.big{font-size:44px!important;font-variant-numeric:tabular-nums}
-.banner{padding:10px 14px;border-radius:8px;margin:12px 0;display:none;font-weight:600}
-.banner.err{display:block;background:rgba(198,40,40,.12);color:var(--err)}.banner.warn{display:block;background:rgba(183,121,31,.14);color:var(--warn)}
-button.b{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);padding:7px 14px;border-radius:7px;cursor:pointer}
-button.b.p{background:var(--acc);border-color:var(--acc);color:#fff}button.b.d{color:var(--err);border-color:var(--err)}
-button.b:disabled{opacity:.45;cursor:default}
-.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-label{display:block;font-size:12px;color:var(--mut);margin:10px 0 3px}
-input,select{width:100%;font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--fg)}
-.f2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 14px}
-pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;max-height:420px;font-size:12px}
-.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:8px 0}.bar i{display:block;height:100%;background:var(--acc);width:0}
-.note{font-size:12px;color:var(--mut);margin-top:6px}
-.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--mut);margin-right:6px}.dot.on{background:var(--ok)}.dot.red{background:var(--err)}
+html{color-scheme:dark}
+body{margin:0;min-height:100vh;background:#05060b;color:var(--fg);font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:-25%;z-index:-2;background:radial-gradient(38% 38% at 12% 18%,rgba(52,226,160,.20),transparent 62%),radial-gradient(34% 34% at 88% 12%,rgba(124,156,255,.24),transparent 62%),radial-gradient(46% 46% at 72% 88%,rgba(192,132,252,.18),transparent 62%);filter:blur(38px);animation:drift 22s ease-in-out infinite alternate}
+body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:56px 56px;mask-image:radial-gradient(ellipse at 50% 0%,#000 20%,transparent 75%)}
+@keyframes drift{0%{transform:translate3d(-2%,-1%,0) scale(1)}50%{transform:translate3d(2%,2%,0) scale(1.06)}100%{transform:translate3d(-1%,3%,0) scale(1.02)}}
+header{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:14px 20px;background:rgba(7,9,16,.62);backdrop-filter:blur(18px) saturate(140%);border-bottom:1px solid var(--line)}
+header h1{font-size:16px;letter-spacing:.02em;margin:0;flex:1 1 auto;font-weight:650}
+header h1::before{content:"";display:inline-block;width:9px;height:9px;margin-right:9px;border-radius:3px;background:var(--grad);box-shadow:0 0 14px rgba(124,156,255,.9);vertical-align:1px}
+.pill{font-size:12px;padding:4px 11px;border-radius:99px;border:1px solid var(--line);color:var(--mut);background:rgba(255,255,255,.03);transition:.25s}
+.pill.ok{color:var(--ok);border-color:rgba(52,226,160,.45);background:rgba(52,226,160,.08);box-shadow:0 0 18px -8px rgba(52,226,160,.9)}
+.pill.bad{color:var(--err);border-color:rgba(255,107,129,.45);background:rgba(255,107,129,.08)}
+.pill.warn{color:var(--warn);border-color:rgba(255,198,92,.45);background:rgba(255,198,92,.08)}
+nav{display:flex;gap:6px;padding:14px 16px 0;overflow-x:auto;scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+nav button{border:1px solid transparent;background:rgba(255,255,255,.03);color:var(--mut);padding:9px 18px;border-radius:99px;font:inherit;font-size:14px;cursor:pointer;transition:.22s;white-space:nowrap}
+nav button:hover{color:var(--fg);background:rgba(255,255,255,.06)}
+nav button.on{color:#05060b;background:var(--grad);font-weight:650;box-shadow:0 10px 28px -12px rgba(124,156,255,.95)}
+main{max-width:1020px;margin:0 auto;padding:8px 16px 56px;perspective:1200px}
+section{display:none}
+section.on{display:block;animation:rise .38s cubic-bezier(.2,.7,.2,1)}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.card{position:relative;background:linear-gradient(158deg,rgba(255,255,255,.075),rgba(255,255,255,.02) 55%,rgba(255,255,255,.045));border:1px solid var(--line);border-radius:20px;padding:18px 20px;margin:14px 0;box-shadow:0 30px 60px -40px #000,inset 0 1px 0 rgba(255,255,255,.10);backdrop-filter:blur(16px) saturate(130%);transform-style:preserve-3d;transition:transform .18s ease,border-color .25s,box-shadow .25s;will-change:transform}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:radial-gradient(600px circle at var(--mx,50%) var(--my,0%),rgba(124,156,255,.10),transparent 42%)}
+.card:hover{border-color:rgba(124,156,255,.38);box-shadow:0 40px 80px -50px #000,inset 0 1px 0 rgba(255,255,255,.16)}
+.card h2{font-size:11.5px;text-transform:uppercase;letter-spacing:.16em;color:var(--mut);margin:0 0 14px;font-weight:650}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+.kv{transform:translateZ(18px)}
+.kv small{display:block;color:var(--mut);font-size:12px;letter-spacing:.02em}
+.kv b{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums}
+.kv b.s{font-size:16px;font-weight:600}
+.kv b.big{font-size:52px;line-height:1.05;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 8px 24px rgba(124,156,255,.35))}
+.banner{padding:13px 16px;border-radius:14px;margin:14px 0;display:none;font-weight:600;border:1px solid;backdrop-filter:blur(10px)}
+.banner.err{display:block;background:rgba(255,107,129,.10);color:var(--err);border-color:rgba(255,107,129,.35)}
+.banner.warn{display:block;background:rgba(255,198,92,.09);color:var(--warn);border-color:rgba(255,198,92,.32)}
+button.b{font:inherit;font-size:14px;border:1px solid var(--line);background:rgba(255,255,255,.045);color:var(--fg);padding:9px 16px;border-radius:12px;cursor:pointer;transition:.2s;backdrop-filter:blur(8px)}
+button.b:hover{background:rgba(255,255,255,.09);transform:translateY(-1px)}
+button.b:active{transform:translateY(0) scale(.98)}
+button.b.p{background:var(--grad);border-color:transparent;color:#04060c;font-weight:700;box-shadow:0 14px 34px -14px rgba(124,156,255,.9)}
+button.b.d{color:var(--err);border-color:rgba(255,107,129,.4);background:rgba(255,107,129,.06)}
+button.b:disabled{opacity:.4;cursor:default;transform:none;box-shadow:none}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+label{display:block;font-size:12px;color:var(--mut);margin:12px 0 5px;letter-spacing:.02em}
+input,select{width:100%;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.035);color:var(--fg);transition:.2s}
+input::placeholder{color:#5b6480}
+input:focus,select:focus{outline:none;border-color:rgba(124,156,255,.7);box-shadow:0 0 0 4px rgba(124,156,255,.14);background:rgba(255,255,255,.06)}
+.f2{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0 16px}
+pre{background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:14px;padding:14px;overflow:auto;max-height:440px;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;color:#c9d2f0}
+code{font:12px ui-monospace,Menlo,monospace;background:rgba(255,255,255,.06);border:1px solid var(--line);padding:1px 6px;border-radius:6px;color:#c9d2f0}
+.bar{height:10px;background:rgba(255,255,255,.06);border-radius:99px;overflow:hidden;margin:12px 0;border:1px solid var(--line)}
+.bar i{display:block;height:100%;border-radius:99px;background:var(--grad);width:0;transition:width .5s cubic-bezier(.2,.7,.2,1);box-shadow:0 0 18px rgba(124,156,255,.7)}
+.note{font-size:12px;color:var(--mut);margin-top:8px;line-height:1.55}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#3a4260;margin-right:7px;transition:.3s;vertical-align:0}
+.dot.on{background:var(--ok);box-shadow:0 0 12px rgba(52,226,160,.9)}
+.dot.red{background:var(--err);box-shadow:0 0 12px rgba(255,107,129,.9)}
+.toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);z-index:60;padding:12px 18px;border-radius:14px;border:1px solid var(--line);background:rgba(10,13,22,.92);backdrop-filter:blur(16px);color:var(--fg);font-size:14px;opacity:0;pointer-events:none;transition:.28s;box-shadow:0 24px 60px -24px #000}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+@media(max-width:560px){.kv b.big{font-size:42px}header{padding:12px 14px}main{padding:6px 12px 48px}.card{padding:16px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
 </style>
 </head>
 <body>
@@ -118,6 +148,7 @@ pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:
 
 <section id="log"><div class="card"><h2>Log</h2><pre id="logText">-</pre></div></section>
 </main>
+<div class="toast" id="toast"></div>
 <script>
 const $=id=>document.getElementById(id);
 const ERR=["","RFID reader","Temperature sensor","Press sense stuck","Over temperature","-","No MQTT server","Queue full","Settings","Watchdog / crash","Stroke while locked","Update failed","Tag write","Display missing"];
@@ -172,7 +203,10 @@ document.querySelectorAll("[data-cmd]").forEach(b=>b.onclick=async()=>{if(b.data
 $("bOn").onclick=()=>post("/api/cmd",{cmd:"relay",arg:"1"}).catch(e=>alert(e.message));
 $("bOff").onclick=()=>post("/api/cmd",{cmd:"relay",arg:"0"}).catch(e=>alert(e.message));
 $("bAck").onclick=()=>post("/api/cmd",{cmd:"ack",arg:"0"}).catch(e=>alert(e.message));
-$("bTag").onclick=async()=>{const t=$("tag").value.trim();if(!t)return;try{await post("/write_tag",{tagText:t})}catch(e){alert(e.message)}};
+$("bTag").onclick=async()=>{const t=$("tag").value.trim();if(!t){toast("Enter the text to write");return}
+const b=$("bTag");b.disabled=true;b.textContent="Writing...";
+try{await post("/write_tag",{tagText:t});toast("Hold the card on the reader (30 s)");$("tagLast").textContent="Hold the card on the reader (30 s)..."}
+catch(e){toast("Error: "+e.message)}finally{b.disabled=false;b.textContent="Write card"}};
 $("bSave").onclick=save;
 $("bScan").onclick=async()=>{$("wifiNote").textContent="Scanning...";try{const l=await (await api("/api/scan")).json();const d=$("ssids");d.textContent="";l.forEach(x=>{const o=document.createElement("option");o.value=x.ssid;o.label=x.rssi+" dBm"+(x.open?" (open)":"");d.appendChild(o)});$("wifiNote").textContent=l.length+" networks found."}catch(e){$("wifiNote").textContent=e.message}};
 $("bWifi").onclick=async()=>{try{await post("/api/wifi",{ssid:$("w_ssid").value,pass:$("w_pass").value});$("wifiNote").textContent="Saved. If the address changes, read it on the display."}catch(e){$("wifiNote").textContent=e.message}};
@@ -180,6 +214,13 @@ $("bCheck").onclick=()=>post("/api/update",{action:"check"}).catch(e=>alert(e.me
 $("bInstall").onclick=()=>{if(confirm("Install the new firmware? Only possible while the machine is off; the board restarts."))post("/api/update",{action:"install"}).catch(e=>alert(e.message))};
 $("bRestart").onclick=()=>{if(confirm("Restart the counter? The machine is switched off."))post("/api/restart").catch(e=>alert(e.message))};
 (function(){const g=$("outs");for(let i=1;i<=4;i++){const d=document.createElement("div");d.className="kv";d.innerHTML='<small>OUT'+i+' (K'+(i+1)+', MQTT relay '+(i+1)+')</small><b class="s"><i class="dot" id="oc'+i+'"></i></b><div class="row" style="margin-top:6px"><button class="b" id="ob'+i+'">Switch on</button></div>';g.appendChild(d);$("ob"+i).onclick=()=>post("/api/cmd",{cmd:"out",arg:i+":2"}).catch(e=>alert(e.message))}})();
+window.toast=function(m){const t=$("toast");t.textContent=m;t.classList.add("on");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("on"),3400)};
+(function(){const cards=[...document.querySelectorAll(".card")];if(matchMedia("(hover:none)").matches)return;
+document.addEventListener("pointermove",e=>{const c=e.target.closest(".card");for(const k of cards)if(k!==c)k.style.transform="";
+if(!c)return;const r=c.getBoundingClientRect(),px=(e.clientX-r.left)/r.width,py=(e.clientY-r.top)/r.height;
+c.style.setProperty("--mx",(px*100)+"%");c.style.setProperty("--my",(py*100)+"%");
+c.style.transform="perspective(900px) rotateX("+((0.5-py)*6).toFixed(2)+"deg) rotateY("+((px-0.5)*6).toFixed(2)+"deg) translateZ(3px)"});
+document.addEventListener("pointerleave",()=>{for(const k of cards)k.style.transform=""});})();
 build();poll();loadSettings();
 </script>
 </body>

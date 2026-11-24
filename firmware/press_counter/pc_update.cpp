@@ -5,6 +5,9 @@
 #include <Update.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
 #include <memory>
 #include "pc_errors.h"
 #include "pc_log.h"
@@ -16,7 +19,9 @@
 namespace fwupd {
 namespace {
 Info g_info;
-bool g_job = false, g_apply = false, g_auto = false;
+bool g_apply = false, g_auto = false;
+volatile bool g_pending = false, g_running = false;
+SemaphoreHandle_t g_sem = nullptr;
 uint32_t g_nextAuto = 0;
 
 void setPhase(uint8_t phase, uint8_t pct, const char* msg) {
@@ -124,23 +129,45 @@ void runJob(bool apply) {
   if (!apply) { setPhase(P_IDLE, 0, "new firmware available"); return; }
   install(e["url"] | "", e["size"] | 0L, e["md5"] | "");
 }
+
+// The download + flash run on core 0, so the control loop on core 1 keeps counting strokes and
+// servicing the watchdog while a 1.3 MB image is pulled over a slow WiFi link.
+void updateTask(void*) {
+  for (;;) {
+    if (xSemaphoreTake(g_sem, portMAX_DELAY) == pdTRUE) {
+      const bool apply = g_apply;
+      g_pending = false;
+      g_running = true;
+      runJob(apply);
+      g_running = false;
+    }
+  }
+}
 }  // namespace
 
-void begin() { memset(&g_info, 0, sizeof(g_info)); g_nextAuto = millis() + 120000UL; }
+void begin() {
+  memset(&g_info, 0, sizeof(g_info));
+  g_nextAuto = millis() + 120000UL;
+  if (!g_sem) g_sem = xSemaphoreCreateBinary();
+  if (g_sem) xTaskCreatePinnedToCore(updateTask, "fwupd", 12288, nullptr, 1, nullptr, 0);
+}
 
-void request(bool apply) { g_job = true; g_apply = apply; g_auto = false; }
+void request(bool apply) {
+  if (g_pending || g_running) return;
+  g_apply = apply;
+  g_pending = true;
+  if (g_sem) xSemaphoreGive(g_sem);
+}
 
 void loop() {
-  if (!g_job && store::net.autoUpdate && store::net.updateUrl[0] && (int32_t)(millis() - g_nextAuto) >= 0) {
+  if (g_pending || g_running) return;
+  if (store::net.autoUpdate && store::net.updateUrl[0] && (int32_t)(millis() - g_nextAuto) >= 0) {
     g_nextAuto = millis() + (uint32_t)store::net.checkMinutes * 60000UL;
-    if (!session::relayOn()) { g_job = true; g_apply = true; g_auto = true; }        // automatic installs only while the machine is off
+    if (!session::relayOn()) request(true);                  // automatic installs only while the machine is off
   }
-  if (!g_job) return;
-  g_job = false;
-  runJob(g_apply);
 }
 
 const Info& info() { return g_info; }
-bool busy() { return g_job || (g_info.phase >= P_CHECK && g_info.phase <= P_FLASH); }
+bool busy() { return g_pending || g_running || (g_info.phase >= P_CHECK && g_info.phase <= P_FLASH); }
 
 }  // namespace fwupd
