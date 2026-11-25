@@ -10,6 +10,22 @@ machine setting. Only two buttons are used and **no gesture ever needs both butt
 | **CALL SUPERVISOR** (SUP) | short press = call the supervisor, hold 1.5 s = cancel that call |
 | **CALL NET / MAINT.** (NET) | short press = call net/maintenance, hold 1.5 s = cancel that call |
 
+## Main screen (0.96" OLED, SSD1306 128x64)
+
+```
+press-1                 MQTT      <- name + network state
+         1258                     <- stroke counter (big)
+OP hamid                  23.5C    <- personnel id (inverted = machine ON) + temperature
+DIE D-114                         <- die id (inverted = die test running)
+E02 TEMP SENSOR                   <- transient: banner > error > call > IP
+```
+
+* The personnel id and the die id always have their own lines, whatever else is on screen.
+* `OP -` / `DIE -` means "nothing scanned yet".
+* The die line shows `DIE TEST <id>` while a die card has the machine on for a try-out.
+* The bottom line is transient: a message (tag written, machine enabled, ...), else the top error,
+  else a pending call, else the board's IP address.
+
 ## Opening the menu
 
 **Hold CALL NET for 3 seconds.** (The 1.5 s cancel happens first if a call was active; that is

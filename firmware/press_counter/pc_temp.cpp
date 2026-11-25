@@ -55,6 +55,22 @@ uint8_t readByte() { uint8_t v = 0; for (int i = 0; i < 8; i++) if (readBit()) v
 // No presence pulse = wrong pin / no sensor / no 3V3 / no pull-up.  Presence but a wrong CRC on the
 // scratchpad = damaged sensor, missing common ground, too long or unshielded wiring, wrong pull-up.
 void scanBus() {
+  // Electrical check first: while the pin drives low the line must read LOW, and right after it is
+  // released it must come back HIGH (the pull-up wins).  "low while released" = something pulls the
+  // line down hard (short to GND, reversed probe, a resistive load instead of a 1-Wire device);
+  // "still low after 2 ms" = a hard short.  A floating line without a pull-up reads randomly.
+  busLow();
+  delayMicroseconds(500);
+  const bool whileLow = digitalRead(PIN_TEMP) == HIGH;
+  busRelease();
+  delayMicroseconds(20);
+  const bool at20us = digitalRead(PIN_TEMP) == HIGH;
+  delayMicroseconds(2000);
+  const bool at2ms = digitalRead(PIN_TEMP) == HIGH;
+  plog::log("temp: GPIO%d driven low reads %s; released the line is HIGH at 20us=%d, at 2ms=%d",
+            (int)PIN_TEMP, whileLow ? "HIGH - the sensor end does not follow the pin (check R11/GND/DQ track)"
+                                    : "LOW (ok)",
+            at20us, at2ms);
   if (!reset()) { plog::log("temp: no presence pulse on GPIO%d (no sensor / no 3V3 / no pull-up)", (int)PIN_TEMP); return; }
   writeByte(0x33);                                           // READ ROM (only valid with one device on the bus)
   char rom[24];

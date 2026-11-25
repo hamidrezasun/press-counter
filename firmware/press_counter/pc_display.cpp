@@ -151,24 +151,27 @@ void draw() {
     return;
   }
 
-  // the counter, as big as it fits
+  // the counter
   snprintf(b, sizeof(b), "%lu", (unsigned long)press::count());
-  const uint8_t scale = strlen(b) <= 5 ? 4 : strlen(b) <= 7 ? 3 : 2;
-  centered(13, b, scale);
+  const uint8_t scale = strlen(b) <= 5 ? 3 : 2;
+  centered(11, b, scale);
 
-  // machine + operator, temperature on the right
-  const int y2 = 13 + 8 * scale + 2;
-  char op[22];
-  if (session::relayOn()) snprintf(op, sizeof(op), "ON %s", session::operatorId());
-  else snprintf(op, sizeof(op), "OFF");
-  op[21] = '\0';
-  display::text(0, y2, op, 1, session::relayOn());
-
-  // temperature (right)
+  // operator (left, inverted while the machine is enabled) and temperature (right)
+  if (session::operatorId()[0]) snprintf(b, sizeof(b), "OP %s", session::operatorId());
+  else snprintf(b, sizeof(b), "OP -");
+  b[21] = '\0';
+  display::text(0, 37, b, 1, session::relayOn());
   const int16_t t = temp::tempC10();
   if (t != INT16_MIN) snprintf(b, sizeof(b), "%s%d.%dC", t < 0 ? "-" : "", abs(t) / 10, abs(t) % 10);
   else snprintf(b, sizeof(b), "--.-C");
-  display::text(128 - display::textWidth(b), y2, b);   // temperature
+  display::text(128 - display::textWidth(b), 37, b);
+
+  // die id (inverted while a die try-out is running)
+  if (session::dieTest()) snprintf(b, sizeof(b), "DIE TEST %s", session::dieId()[0] ? session::dieId() : "");
+  else if (session::dieId()[0]) snprintf(b, sizeof(b), "DIE %s", session::dieId());
+  else snprintf(b, sizeof(b), "DIE -");
+  b[21] = '\0';
+  display::text(0, 46, b, 1, session::dieTest());
 
   // bottom line: banner > error > call > write-tag prompt > die / IP
   const char* banner = session::bannerText();
@@ -177,12 +180,9 @@ void draw() {
   else if (e && pc::errorSeverity(e) > 0) snprintf(b, sizeof(b), "E%02u %s", (unsigned)e, pc::errorText(e));
   else if (session::callMask()) snprintf(b, sizeof(b), "CALL %s%s", session::callMask() & 2 ? "SUPERVISOR " : "", session::callMask() & 4 ? "NET" : "");
   else if (nfc::writePending()) snprintf(b, sizeof(b), "HOLD CARD TO WRITE %lu", (unsigned long)(nfc::writeRemainingMs() / 1000UL));
-  else if (session::dieTest()) snprintf(b, sizeof(b), "DIE TEST %s", session::dieId()[0] ? session::dieId() : "ON");
-  else if (session::operatorId()[0]) snprintf(b, sizeof(b), "OP %s DIE %s", session::operatorId(), session::dieId()[0] ? session::dieId() : "-");
-  else if (session::dieId()[0]) snprintf(b, sizeof(b), "DIE %s", session::dieId());
   else snprintf(b, sizeof(b), "%s", net::wifiUp() ? net::ip() : "");
   b[21] = '\0';
-  centered(56, b, 1, (e && pc::errorSeverity(e) >= 2) || session::callMask() || session::dieTest());
+  centered(56, b, 1, (e && pc::errorSeverity(e) >= 2) || session::callMask());
   display::flush();
 }
 }  // namespace
