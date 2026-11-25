@@ -123,6 +123,18 @@ void setup() {
 }
 
 void loop() {
+  // A firmware update erases/writes flash with the cache disabled, so the loop task can be starved
+  // for far longer than the normal watchdog window.  Widen it while an update is in progress.
+  static bool updWdt = false;
+  const bool busy = fwupd::busy();
+  if (busy != updWdt) {
+    updWdt = busy;
+    esp_task_wdt_config_t w = {};
+    w.timeout_ms = busy ? 180000UL : (uint32_t)WDT_TIMEOUT_S * 1000UL;
+    w.idle_core_mask = 0;
+    w.trigger_panic = true;
+    esp_task_wdt_reconfigure(&w);
+  }
   esp_task_wdt_reset();
   press::poll();                                           // first: stroke timing never waits for anything else
   buttons::poll();

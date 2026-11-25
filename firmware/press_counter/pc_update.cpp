@@ -68,7 +68,14 @@ bool open(HTTPClient& http, std::unique_ptr<NetworkClient>& client, const String
 }
 
 bool install(const char* url, long expected, const char* md5) {
-  if (session::relayOn() || press::active()) { setPhase(P_FAILED, 0, "machine is running - switch it off first"); return false; }
+  // An update must be possible in every situation: if the machine is enabled, switch it off first
+  // (the relay drops the press contactor = safe state), then flash.  An active stroke signal is
+  // tolerated - the running stroke is lost, the lifetime counter is flushed before the restart.
+  if (session::relayOn()) {
+    session::setRelay(false, pc::RR_REMOTE);
+    plog::log("update: machine switched off for the update");
+  }
+  if (press::active()) plog::log("update: stroke signal active - flashing anyway");
   setPhase(P_DOWNLOAD, 0, "downloading firmware");
   HTTPClient http;
   std::unique_ptr<NetworkClient> client;
@@ -82,7 +89,8 @@ bool install(const char* url, long expected, const char* md5) {
   long got = 0;
   uint32_t lastData = millis();
   while (got < total) {
-    esp_task_wdt_reset();
+    // no esp_task_wdt_reset() here: this task is not subscribed to the watchdog.  The control loop
+    // on core 1 keeps resetting it, and the download no longer blocks that task.
     const int avail = s ? s->available() : -1;
     if (avail < 0) break;
     if (avail == 0) {

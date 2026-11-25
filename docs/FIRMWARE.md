@@ -115,3 +115,34 @@ The image is streamed into the second OTA slot, MD5-checked, and the board resta
 * Events (strokes, cards, relay, calls, errors, temperature) are queued in RAM (64 entries) while the broker is away and published in order when it is back; when the queue is full the oldest temperature reports go first, strokes last (E07). A power loss loses the queue - the lifetime counter is saved in NVS every 25 strokes and 10 s after the last stroke.
 * Events that happen before NTP answered are back-dated when they are published.
 * Over-temperature switches the machine off; a stroke while the machine is off raises E10 (contactor bypassed).
+
+## Console and over-the-air updates on a bench programmer
+
+Build options (no source change needed):
+
+| Flag | Effect |
+|------|--------|
+| `PC_NO_CONSOLE` | never touches the Arduino `Serial` (UART driver). Set it when `Serial.begin()` crashes on the module/toolchain in use |
+| `PC_ROM_CONSOLE` | logs and the command shell over UART0 (115200) through the ROM (`ets_printf` + direct FIFO reads) — works even with `PC_NO_CONSOLE` |
+
+```
+arduino-cli compile --fqbn esp32:esp32:esp32:PartitionScheme=min_spiffs \
+  --build-property "build.extra_flags=-DPC_NO_CONSOLE -DPC_ROM_CONSOLE" <sketch>
+```
+
+Serial commands for updates:
+
+```
+update            check the update server and report what it found
+update install    download, flash and restart
+updateurl <url>   set the update server (folder holding manifest.json) and save it
+```
+
+Notes:
+
+* The manifest check/download/flash runs in a FreeRTOS task pinned to **core 0**; the control loop keeps
+  counting strokes on core 1 and the watchdog window is widened for the duration of the update.
+* An update is installed in every situation: if the machine relay is on it is switched off first (safe
+  state), and an active stroke signal is tolerated instead of refusing the update.
+* After flashing the app over USB on a board that has previously updated over the air, erase `otadata`
+  (`esptool erase-region 0xe000 0x2000`) — otherwise the bootloader keeps booting the OTA slot.

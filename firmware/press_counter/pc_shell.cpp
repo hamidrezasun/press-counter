@@ -1,5 +1,7 @@
 #include "pc_shell.h"
+#include "pc_con.h"
 #include "pc_config.h"
+#include "pc_update.h"
 #include "pc_errors.h"
 #include "pc_events.h"
 #include "pc_io.h"
@@ -21,6 +23,7 @@ uint8_t g_n = 0;
 void help(Print& o) {
   o.println(F("commands: help status cfg set <key> <val> save defaults err clear relay <0|1> out <1..4> <0|1|2> reset call <1|2> ack buzz"));
   o.println(F("          tag [write <text>] | wifi <ssid> <password> | mqtt <host> [port] | setup (WiFi access point) | log | reboot"));
+  o.println(F("          update [install]  (check the update server / install and restart) | updateurl <url>"));
 }
 
 void status(Print& o) {
@@ -98,6 +101,16 @@ void run(Print& o, char* cmd) {
     o.println(F("saved"));
   } else if (!strcmp(cmd, "setup")) { net::startSetupAp(); o.println(F("setup access point open")); }
   else if (!strcmp(cmd, "log")) { for (int i = 0; i < plog::count(); i++) o.println(plog::line(i)); }
+  else if (!strcmp(cmd, "updateurl") || !strcmp(cmd, "url")) {
+    pc::copyStr(store::net.updateUrl, arg, sizeof(store::net.updateUrl));
+    if (!store::saveNet()) { o.println(F("NVS write failed")); return; }
+    o.print(F("update server: ")); o.println(store::net.updateUrl);
+  }
+  else if (!strcmp(cmd, "update") || !strcmp(cmd, "ota")) {
+    const bool apply = !strcmp(arg, "install");
+    fwupd::request(apply);
+    o.println(apply ? F("update: install queued") : F("update: check queued"));
+  }
   else if (!strcmp(cmd, "reboot")) { o.println(F("rebooting")); session::remoteCommand(pc::CMD_REBOOT, 0, pc::RR_REMOTE); }
   else if (cmd[0]) { o.println(F("unknown command, try 'help'")); }
 }
@@ -105,24 +118,43 @@ void run(Print& o, char* cmd) {
 
 namespace shell {
 
+// Serial (Arduino UART driver) by default; the ROM console when the driver is unusable.
+static Print& console() {
+#if defined(PC_ROM_CONSOLE)
+  return con::out();
+#else
+  return Serial;
+#endif
+}
+
 void begin() {
-#ifndef PC_NO_CONSOLE
+#if defined(PC_ROM_CONSOLE)
+  con::begin();
+#elif !defined(PC_NO_CONSOLE)
   Serial.begin(CONSOLE_BAUD);
 #endif
 }
 
 void poll() {
-#ifdef PC_NO_CONSOLE
-  return;
-#endif
   int guard = 64;
+#if defined(PC_ROM_CONSOLE)
+  int ch;
+  while (guard-- && (ch = con::read()) >= 0) {
+    if (ch == '\r' || ch == '\n') {
+      if (g_n) { g_line[g_n] = '\0'; g_n = 0; run(console(), g_line); }
+    } else if ((size_t)g_n + 1 < sizeof(g_line) && ch >= 32 && ch < 127) {
+      g_line[g_n++] = (char)ch;
+    }
+  }
+#else
   while (guard-- && Serial.available() > 0) {
     const int ch = Serial.read();
     if (ch < 0) break;
     if (ch == '\r' || ch == '\n') {
-      if (g_n) { g_line[g_n] = '\0'; g_n = 0; run(Serial, g_line); }
+      if (g_n) { g_line[g_n] = '\0'; g_n = 0; run(console(), g_line); }
     } else if ((size_t)g_n + 1 < sizeof(g_line)) g_line[g_n++] = (char)ch;
   }
+#endif
 }
 
 }  // namespace shell

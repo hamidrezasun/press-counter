@@ -2,8 +2,9 @@
 //
 //   <updateUrl>/manifest.json   {"esp32": {"version":"6.1","url":"press_counter-6.1.bin","md5":"<hex>","size":123456}}
 //
-//   The image is streamed into the OTA slot (Update class), MD5 checked, then the board restarts.  Only installed while the machine
-//   is off (relay off, no stroke).  Not cryptographically signed: use a server you trust on a network you trust.
+//   The image is streamed into the OTA slot (Update class), MD5 checked, then the board restarts.  An update is installed in
+//   every situation: if the machine relay is on it is switched off first (safe state), an active stroke signal is tolerated.
+//   Not cryptographically signed: use a server you trust on a network you trust.
 #ifndef PC_UPDATE_H
 #define PC_UPDATE_H
 
