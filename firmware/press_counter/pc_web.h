@@ -9,6 +9,9 @@
 namespace web {
 void begin();
 void loop();
+void pause();                          // stop serving (used while a firmware download owns the network)
+void resume();                         // serve again
+bool serving();
 }  // namespace web
 
 #endif

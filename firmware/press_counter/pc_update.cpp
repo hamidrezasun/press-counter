@@ -15,6 +15,7 @@
 #include "pc_press.h"
 #include "pc_session.h"
 #include "pc_store.h"
+#include "pc_web.h"
 
 namespace fwupd {
 namespace {
@@ -72,12 +73,13 @@ bool install(const char* url, long expected, const char* md5) {
   // network stack, which makes lwIP assert (pbuf_free: p->ref > 0).
   if (press::active()) plog::log("update: stroke signal active - flashing anyway");
   setPhase(P_DOWNLOAD, 0, "downloading firmware");
+  web::pause();                                      // the web server must not touch the network now
   HTTPClient http;
   std::unique_ptr<NetworkClient> client;
-  if (!open(http, client, absoluteUrl(url))) { setPhase(P_FAILED, 0, "firmware image: HTTP error"); return false; }
+  if (!open(http, client, absoluteUrl(url))) { setPhase(P_FAILED, 0, "firmware image: HTTP error"); web::resume(); return false; }
   long total = http.getSize();
   if (total <= 0) total = expected;
-  if (total <= 0 || !Update.begin((size_t)total)) { setPhase(P_FAILED, 0, "firmware image: no room / unknown size"); return false; }
+  if (total <= 0 || !Update.begin((size_t)total)) { setPhase(P_FAILED, 0, "firmware image: no room / unknown size"); web::resume(); return false; }
   if (md5 && strlen(md5) == 32) Update.setMD5(md5);
   NetworkClient* s = http.getStreamPtr();
   uint8_t buf[1024];
@@ -104,6 +106,7 @@ bool install(const char* url, long expected, const char* md5) {
     Update.abort();
     setPhase(P_FAILED, 0, "firmware image rejected (size / MD5)");
     err::latch(pc::ERR_UPDATE, 1, 600000UL);
+    web::resume();
     return false;
   }
   setPhase(P_DONE, 100, "updated - restarting");

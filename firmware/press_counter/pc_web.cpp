@@ -26,6 +26,7 @@ namespace {
 
 WebServer srv(80);
 uint32_t g_restartAt = 0;
+bool g_serving = false;
 
 void cors() {
   srv.sendHeader("Access-Control-Allow-Origin", "*");
@@ -296,7 +297,7 @@ void handlePressCounter() {
 
 }  // namespace
 
-void begin() {
+void routes() {
   srv.on("/", HTTP_GET, handleRoot);
   srv.on("/api/state", HTTP_GET, handleState);
   srv.on("/api/settings", HTTP_GET, handleGetSettings);
@@ -323,7 +324,32 @@ void begin() {
     if (net::apMode() && !net::wifiUp()) { srv.sendHeader("Location", "http://192.168.4.1/"); srv.send(302); return; }   // captive portal
     sendText(404, "Not found");
   });
+}
+
+void begin() {
+  routes();
   srv.begin();
+  g_serving = true;
+}
+
+// The download/flash opens its own HTTP client.  Leaving the web server accepting clients while it
+// does makes the board panic (two users of the same lwIP stack: an assert in the pbuf handling), so
+// the server is stopped for the duration of an update and started again if the update fails.
+void pause() {
+  if (!g_serving) return;
+  srv.stop();
+  g_serving = false;
+  plog::log("web: page stopped while the update runs");
+}
+
+void resume() {
+  if (g_serving) return;
+  srv.begin();
+  g_serving = true;
+  plog::log("web: page back up");
+}
+
+bool serving() { return g_serving; }
 }
 
 void loop() {
