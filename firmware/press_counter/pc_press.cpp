@@ -27,6 +27,7 @@ uint32_t g_startUs = 0, g_gapUs = 0;
 uint32_t g_startMs = 0;
 uint32_t g_count = 0, g_lastDur = 0, g_lastEndMs = 0, g_rejected = 0;
 bool     g_ever = false;
+bool     g_countEnabled = true;
 press::StrokeCallback g_cb = nullptr;
 
 void finish(uint32_t endUs) {
@@ -34,6 +35,7 @@ void finish(uint32_t endUs) {
   g_state = IDLE;
   g_gapOpen = false;
   if (g_ignoreThis) { g_ignoreThis = false; return; }
+  if (!g_countEnabled) return;                       // die test: the stroke is timed but not counted
   if (durMs < store::cfg.minPulseMs) { g_rejected++; return; }
   g_count++;
   g_lastDur = durMs;
@@ -64,6 +66,11 @@ void begin() {
 }
 
 void onStroke(StrokeCallback cb) { g_cb = cb; }
+
+void setCountEnabled(bool on) {
+  g_countEnabled = on;
+  if (!on) { g_count = 0; g_lastDur = 0; g_lastEndMs = 0; g_ever = false; }   // the test run does not add up
+}
 
 void poll() {
   // drain the edge ring

@@ -68,7 +68,7 @@
 // ── timing / behaviour ───────────────────────────────────────────────────────────────────────────
 #define BTN_DEBOUNCE_MS          25UL
 #define BTN_CANCEL_CALL_MS       1500UL        // hold a call button this long to cancel the call
-#define BTN_SETUP_MS             6000UL        // hold BOTH call buttons this long: open the WiFi setup access point
+#define BTN_MENU_MS              3000UL        // hold CALL NET this long: open the local menu
 #define TAG_COOLDOWN_MS          3000UL        // ignore the same card for 3 s after it was handled
 #define TAG_WRITE_TIMEOUT_MS     30000UL
 #define NFC_POLL_MS              150UL

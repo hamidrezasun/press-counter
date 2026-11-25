@@ -17,6 +17,7 @@ char     g_die[MAX_TAG_TEXT + 2] = "";
 uint32_t g_callAt[3] = {0, 0, 0};               // millis() when raised, 0 = not active
 char     g_banner[32] = "";
 uint32_t g_bannerUntil = 0;
+bool     g_dieTest = false;                     // a die card enabled the machine for a die try-out: nothing is counted
 
 const char* afterColon(const char* t) {
   const char* c = strchr(t, ':');
@@ -37,6 +38,7 @@ bool canEnable() { return !err::active(pc::ERR_OVERTEMP); }
 uint32_t sessionSeconds() { return g_relay ? (millis() - g_relayOnAt) / 1000UL : 0; }
 const char* operatorId() { return g_operator; }
 const char* dieId() { return g_die; }
+bool dieTest() { return g_dieTest; }
 
 void banner(const char* text, uint32_t ms) {
   pc::copyStr(g_banner, text, sizeof(g_banner));
@@ -80,6 +82,11 @@ void handleTag(char kind, const char* text) {
     return;
   }
   if (kind == pc::NFC_PERSONNEL) {
+    if (g_dieTest) {                                   // leaving a die test: the die card is what started it
+      g_dieTest = false;
+      press::setCountEnabled(true);
+      banner("DIE TEST ENDED");
+    }
     const bool wasOn = g_relay;
     const bool ok = setRelay(!wasOn, pc::RR_TAG);
     if (ok) {
@@ -89,9 +96,27 @@ void handleTag(char kind, const char* text) {
       banner(g_relay ? "MACHINE ENABLED" : "MACHINE STOPPED");
     }
   } else if (kind == pc::NFC_DIE) {
-    pc::copyStr(g_die, afterColon(text), sizeof(g_die));
-    io::play(io::SND_SUCCESS);
-    banner("DIE RECORDED");
+    char id[MAX_TAG_TEXT + 2];
+    pc::copyStr(id, afterColon(text), sizeof(id));
+    const bool sameDie = g_dieTest && strcmp(g_die, id) == 0;
+    pc::copyStr(g_die, id, sizeof(g_die));               // the die that is mounted is always recorded
+    if (sameDie) {
+      // scanning the same die card again ends the test
+      g_dieTest = false;
+      press::setCountEnabled(true);
+      setRelay(false, pc::RR_TAG);
+      pc::copyStr(g_die, id, sizeof(g_die));             // setRelay() off clears it - keep the recorded die
+      io::play(io::SND_SUCCESS);
+      banner("DIE TEST END - OFF");
+    } else {
+      // scanning a die card enables the machine so the die can be tried out; nothing is counted
+      g_dieTest = true;
+      press::setCountEnabled(false);
+      setRelay(true, pc::RR_TAG);                        // refuses on over-temperature, like every other start
+      pc::copyStr(g_die, id, sizeof(g_die));
+      io::play(io::SND_SUCCESS);
+      banner(g_relay ? "DIE TEST - MACHINE ON" : g_die);
+    }
   } else {
     io::play(io::SND_WARNING);                           // unknown format / unreadable card: log it, change nothing
     banner(text[0] ? "UNKNOWN CARD" : "CARD NOT READABLE");

@@ -176,10 +176,11 @@ void draw() {
   else if (e && pc::errorSeverity(e) > 0) snprintf(b, sizeof(b), "E%02u %s", (unsigned)e, pc::errorText(e));
   else if (session::callMask()) snprintf(b, sizeof(b), "CALL %s%s", session::callMask() & 2 ? "SUPERVISOR " : "", session::callMask() & 4 ? "NET" : "");
   else if (nfc::writePending()) snprintf(b, sizeof(b), "HOLD CARD TO WRITE %lu", (unsigned long)(nfc::writeRemainingMs() / 1000UL));
+  else if (session::dieTest()) snprintf(b, sizeof(b), "DIE TEST %s", session::dieId()[0] ? session::dieId() : "ON");
   else if (session::dieId()[0]) snprintf(b, sizeof(b), "DIE %s", session::dieId());
   else snprintf(b, sizeof(b), "%s", net::wifiUp() ? net::ip() : "");
   b[21] = '\0';
-  centered(56, b, 1, (e && pc::errorSeverity(e) >= 2) || session::callMask());
+  centered(56, b, 1, (e && pc::errorSeverity(e) >= 2) || session::callMask() || session::dieTest());
   display::flush();
 }
 }  // namespace

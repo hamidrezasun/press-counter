@@ -87,6 +87,7 @@ void handleState() {
   m["errMask"] = err::mask();
   m["operator"] = session::operatorId();
   m["die"] = session::dieId();
+  m["dieTest"] = session::dieTest();
   m["sessionSec"] = session::sessionSeconds();
   m["calls"] = session::callMask();
   m["queued"] = events::pending();

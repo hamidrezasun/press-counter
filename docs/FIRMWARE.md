@@ -59,7 +59,7 @@ Opening a terminal does not reset the board when the terminal asserts DTR and RT
 
 **Cards** (RC522, MIFARE Classic 1K / NTAG / Ultralight with one NDEF text record): `personnel:<id>` toggles the machine, `die:<id>` records the mounted die, anything else is logged as unknown. Cards are written from the web page (*Write card*), MQTT (`{"cmd":"write_tag","text":"die:A12"}`) or the console (`tag write personnel:1234`): the next card held to the reader within 30 s is written. Cards written by the v2 / v5 firmware stay readable (same NDEF layout).
 
-**Call buttons:** a short press raises the call (buzzer, red LED blinks, MQTT event), holding the button 1.5 s cancels it; a supervisor acknowledges it on the web page or over MQTT. **Holding both buttons for 6 s opens the WiFi setup network.**
+**Call buttons:** a short press raises the call (buzzer, red LED blinks, MQTT event), holding the button 1.5 s cancels it; a supervisor acknowledges it on the web page or over MQTT. **Holding CALL NET for 3 s opens the local menu** (update, log, WiFi setup, machine settings) - see [MENU.md](MENU.md).
 
 **Output relays OUT1-OUT4** (K2-K5, COM / NO / NC): manual ones are switched on the web page, over MQTT (`relay/2..5/set`) or on the console (`out 2 1`); ON needs *Allow remote start*, OFF always works. Automatic ones follow their mode (see settings). All are OFF after a reset.
 

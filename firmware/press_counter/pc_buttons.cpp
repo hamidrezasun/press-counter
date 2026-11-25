@@ -12,7 +12,7 @@ struct Btn {
 };
 Btn g_b[2] = {{PIN_BTN_SUP, pc::CALL_SUPERVISOR}, {PIN_BTN_NET, pc::CALL_NET}};
 uint32_t g_activity = 0;
-bool g_setup = false, g_bothDone = false;
+bool g_menuReq = false, g_menuDone = false, g_menuMode = false;
 }  // namespace
 
 namespace buttons {
@@ -30,25 +30,30 @@ void poll() {
     if (raw != b.stable && now - b.changedAt >= BTN_DEBOUNCE_MS) {
       b.stable = raw;
       g_activity = now;
-      if (raw) { b.pressedAt = now; b.longDone = false; io::play(io::SND_CLICK); }
-      else if (!b.longDone && !g_bothDone) session::call(b.call);                 // short press: raise
+      if (raw) { b.pressedAt = now; b.longDone = false; g_menuDone = false; io::play(io::SND_CLICK); }
+      else if (!b.longDone && !g_menuMode) session::call(b.call);            // short press: raise the call
     }
-    if (b.stable && !b.longDone && now - b.pressedAt >= BTN_CANCEL_CALL_MS && !(g_b[0].stable && g_b[1].stable)) {
+    // 1.5 s: cancel the call of this button (in the menu the buttons only drive the menu)
+    if (!g_menuMode && b.stable && !b.longDone && now - b.pressedAt >= BTN_CANCEL_CALL_MS) {
       b.longDone = true;
-      session::cancelCall(b.call);                                                 // long press: cancel
+      session::cancelCall(b.call);
     }
-  }
-  const bool both = g_b[0].stable && g_b[1].stable;
-  if (!both) { if (!g_b[0].stable && !g_b[1].stable) g_bothDone = false; return; }
-  for (Btn& b : g_b) b.longDone = true;                                            // a two-button hold is neither a call nor a cancel
-  if (!g_bothDone && now - (g_b[0].pressedAt > g_b[1].pressedAt ? g_b[0].pressedAt : g_b[1].pressedAt) >= BTN_SETUP_MS) {
-    g_bothDone = true;
-    g_setup = true;
-    io::play(io::SND_STARTUP);
+    // CALL NET held 3 s opens the local menu.  No gesture ever needs both buttons at once.
+    if (!g_menuMode && b.stable && b.call == pc::CALL_NET && !g_menuDone && now - b.pressedAt >= BTN_MENU_MS) {
+      g_menuDone = true;
+      g_menuReq = true;
+      io::play(io::SND_STARTUP);
+    }
   }
 }
 
-bool takeSetupRequest() { const bool r = g_setup; g_setup = false; return r; }
+bool takeMenuRequest() { const bool r = g_menuReq; g_menuReq = false; return r; }
+
+void setMenuMode(bool on) {
+  g_menuMode = on;
+  if (on) for (Btn& b : g_b) b.longDone = true;         // the press that opened the menu does nothing else
+}
+
 uint32_t lastActivityMs() { return g_activity; }
 bool down(uint8_t type) { return type >= 1 && type <= 2 && g_b[type - 1].stable; }
 

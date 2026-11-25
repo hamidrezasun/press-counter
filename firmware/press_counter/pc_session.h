@@ -16,6 +16,7 @@ void toggleRelay(uint8_t reason);
 uint32_t sessionSeconds();                              // seconds since the relay was switched on (0 when off)
 const char* operatorId();
 const char* dieId();
+bool dieTest();                                         // true while a die card has the machine on for a try-out (strokes are not counted)
 
 void handleTag(char kind, const char* text);            // from nfc::onTag
 void handleStroke(uint32_t durationMs);                 // from press::onStroke

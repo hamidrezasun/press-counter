@@ -12,6 +12,7 @@ typedef void (*StrokeCallback)(uint32_t durationMs);
 void begin();
 void poll();                          // call every loop
 void onStroke(StrokeCallback cb);
+void setCountEnabled(bool on);        // false = die test: strokes are timed but not counted
 
 uint32_t count();                     // strokes since the last reset (session counter)
 void resetCount();

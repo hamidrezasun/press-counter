@@ -27,9 +27,17 @@ uint32_t g_supAt = 0, g_netAt = 0;
 bool g_supDown = false, g_netDown = false, g_supLong = false, g_netLong = false;
 
 const char* const ITEMS[] = {"Check update", "Install update", "Show log", "WiFi setup", "Settings", "Exit"};
+const char* const ITEM_DESC[] = {"ask the update server", "download and restart", "last log lines", "open setup network", "machine settings", "back to the counter"};
 const int NITEMS = sizeof(ITEMS) / sizeof(ITEMS[0]);
 
 const int ROWS = 6;                              // 64 px / 10 px per row, title bar on top
+const int ROOT_ROWS = 4;                         // root list keeps room for the description + hints
+
+void hint(const char* s) {
+  char b[22];
+  snprintf(b, sizeof(b), "%-20.20s", s);
+  display::text(0, 56, b, 1, true);
+}
 
 void title(const char* t) {
   char b[22];
@@ -46,11 +54,18 @@ void row(int i, const char* t, bool mark) {
 
 // ── screens ────────────────────────────────────────────────────────────────────────────────────────
 void drawRoot() {
-  title("MENU");
-  for (int i = 0; i < NITEMS && i < ROWS; i++) {
-    if (i == 3 && g_top == 1) continue;          // keep it short on a 6-row display
-    row(i - g_top, ITEMS[i], i == g_sel);
+  char h[22];
+  snprintf(h, sizeof(h), "MENU   %d/%d", g_sel + 1, NITEMS);
+  title(h);
+  for (int i = 0; i < ROOT_ROWS; i++) {
+    const int idx = g_top + i;
+    if (idx >= NITEMS) break;
+    row(i, ITEMS[idx], idx == g_sel);
   }
+  char d[24];
+  snprintf(d, sizeof(d), "%s", ITEM_DESC[g_sel]);
+  display::text(0, 46, d, 1, false);
+  hint("NET=ok SUP=next  hold SUP=out");
 }
 
 void drawUpdate() {
@@ -60,17 +75,18 @@ void drawUpdate() {
   snprintf(b, sizeof(b), "now  %s", PC_FW_VERSION_STR); row(0, b, false);
   snprintf(b, sizeof(b), "new  %s", u.latest[0] ? u.latest : "-"); row(1, b, false);
   snprintf(b, sizeof(b), "%3u%% %s", u.pct, u.phase == fwupd::P_IDLE ? "" : ".."); row(2, b, false);
-  row(3, u.msg[0] ? u.msg : "CALL NET = start", true);
-  row(4, "CALL SUP = back", false);
+  row(3, u.msg[0] ? u.msg : "press NET to start", true);
+  hint("NET=start hold SUP=back");
 }
 
 void drawLog() {
   title("LOG");
   const int n = plog::count();
-  for (int i = 0; i < ROWS; i++) {
-    const int idx = n - 1 - g_logTop - (ROWS - 1 - i);
+  for (int i = 0; i < ROWS - 1; i++) {
+    const int idx = n - 1 - g_logTop - (ROWS - 2 - i);
     row(i, idx >= 0 ? plog::line(idx) : "", false);
   }
+  hint("SUP/NET=scroll hold SUP=back");
 }
 
 void drawParam(bool editing) {
@@ -80,13 +96,12 @@ void drawParam(bool editing) {
     store::getParam(store::paramKey(g_param), v, sizeof(v));
     char b[24];
     snprintf(b, sizeof(b), "%-10.10s", store::paramKey(g_param)); row(0, b, false);
-    snprintf(b, sizeof(b), "old %s", g_orig);                     row(1, b, false);
-    snprintf(b, sizeof(b), "new %s", v);                          row(2, b, true);
-    row(4, "NET +/-   SUP -", false);
-    row(5, "hold NET = save", false);
+    snprintf(b, sizeof(b), "was %s", g_orig);                     row(1, b, false);
+    snprintf(b, sizeof(b), "now %s", v);                          row(2, b, true);
+    hint("NET=+ SUP=- holdNET=save");
     return;
   }
-  for (int i = 0; i < ROWS; i++) {
+  for (int i = 0; i < ROWS - 1; i++) {
     const int idx = g_top + i;
     if (idx >= store::paramCount()) break;
     char v[30], b[24];
@@ -94,6 +109,7 @@ void drawParam(bool editing) {
     snprintf(b, sizeof(b), "%-8.8s %s", store::paramKey(idx), v);
     row(i, b, idx == g_param);
   }
+  hint("NET=edit SUP=next");
 }
 
 void draw() {
@@ -109,8 +125,9 @@ void draw() {
 }
 
 void clampScroll() {
+  const int rows = (g_screen == S_ROOT) ? ROOT_ROWS : ROWS;
   if (g_sel < g_top) g_top = g_sel;
-  if (g_sel >= g_top + ROWS) g_top = g_sel - ROWS + 1;
+  if (g_sel >= g_top + rows) g_top = g_sel - rows + 1;
 }
 
 void enter() {
@@ -145,13 +162,14 @@ namespace menu {
 
 void open() {
   g_open = true;
+  buttons::setMenuMode(true);          // the two buttons now only drive the menu
   g_screen = S_ROOT;
   g_sel = g_top = 0;
   session::banner("MENU", 3000);
-  plog::log("menu opened (CALL SUP = next, CALL NET = select, hold SUP = back)");
+  plog::log("menu opened (SUP = next/-, NET = ok/+, hold SUP = back)");
 }
 
-void close() { g_open = false; ui::wake(); }
+void close() { g_open = false; buttons::setMenuMode(false); ui::wake(); }
 
 bool active() { return g_open; }
 

@@ -159,7 +159,7 @@ void loop() {
     web::loop();
   }
   fwupd::loop();
-  if (buttons::takeSetupRequest()) menu::open();            // both call buttons: local menu (also WiFi setup)
+  if (buttons::takeMenuRequest() && !menu::active()) menu::open();   // hold CALL NET 3 s
 
   const uint32_t now = millis();
   if (now - g_tempAt >= TEMP_REPORT_MS) {
