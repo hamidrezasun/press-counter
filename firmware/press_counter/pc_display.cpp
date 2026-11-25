@@ -156,18 +156,19 @@ void draw() {
   const uint8_t scale = strlen(b) <= 5 ? 4 : strlen(b) <= 7 ? 3 : 2;
   centered(13, b, scale);
 
-  // machine + operator
+  // machine + operator, temperature on the right
   const int y2 = 13 + 8 * scale + 2;
-  if (session::relayOn()) snprintf(b, sizeof(b), "ON %s", session::operatorId());
-  else snprintf(b, sizeof(b), "OFF");
-  b[21] = '\0';
-  display::text(0, y2, b, 1, session::relayOn());
+  char op[22];
+  if (session::relayOn()) snprintf(op, sizeof(op), "ON %s", session::operatorId());
+  else snprintf(op, sizeof(op), "OFF");
+  op[21] = '\0';
+  display::text(0, y2, op, 1, session::relayOn());
 
   // temperature (right)
   const int16_t t = temp::tempC10();
   if (t != INT16_MIN) snprintf(b, sizeof(b), "%s%d.%dC", t < 0 ? "-" : "", abs(t) / 10, abs(t) % 10);
   else snprintf(b, sizeof(b), "--.-C");
-  display::text(128 - display::textWidth(b), y2, b);
+  display::text(128 - display::textWidth(b), y2, b);   // temperature
 
   // bottom line: banner > error > call > write-tag prompt > die / IP
   const char* banner = session::bannerText();
@@ -177,6 +178,7 @@ void draw() {
   else if (session::callMask()) snprintf(b, sizeof(b), "CALL %s%s", session::callMask() & 2 ? "SUPERVISOR " : "", session::callMask() & 4 ? "NET" : "");
   else if (nfc::writePending()) snprintf(b, sizeof(b), "HOLD CARD TO WRITE %lu", (unsigned long)(nfc::writeRemainingMs() / 1000UL));
   else if (session::dieTest()) snprintf(b, sizeof(b), "DIE TEST %s", session::dieId()[0] ? session::dieId() : "ON");
+  else if (session::operatorId()[0]) snprintf(b, sizeof(b), "OP %s DIE %s", session::operatorId(), session::dieId()[0] ? session::dieId() : "-");
   else if (session::dieId()[0]) snprintf(b, sizeof(b), "DIE %s", session::dieId());
   else snprintf(b, sizeof(b), "%s", net::wifiUp() ? net::ip() : "");
   b[21] = '\0';

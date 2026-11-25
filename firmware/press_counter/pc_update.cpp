@@ -21,7 +21,6 @@ namespace {
 Info g_info;
 bool g_apply = false, g_auto = false;
 volatile bool g_pending = false, g_running = false;
-SemaphoreHandle_t g_sem = nullptr;
 uint32_t g_nextAuto = 0;
 
 void setPhase(uint8_t phase, uint8_t pct, const char* msg) {
@@ -85,8 +84,7 @@ bool install(const char* url, long expected, const char* md5) {
   long got = 0;
   uint32_t lastData = millis();
   while (got < total) {
-    // no esp_task_wdt_reset() here: this task is not subscribed to the watchdog.  The control loop
-    // on core 1 keeps resetting it, and the download no longer blocks that task.
+    esp_task_wdt_reset();                              // this task owns the watchdog while it flashes
     const int avail = s ? s->available() : -1;
     if (avail < 0) break;
     if (avail == 0) {
@@ -98,6 +96,7 @@ bool install(const char* url, long expected, const char* md5) {
     if (n <= 0) continue;
     lastData = millis();
     if (Update.write(buf, (size_t)n) != (size_t)n) break;
+    esp_task_wdt_reset();
     got += n;
     g_info.pct = (uint8_t)(100LL * got / total);
   }
@@ -134,26 +133,15 @@ void runJob(bool apply) {
   install(e["url"] | "", e["size"] | 0L, e["md5"] | "");
 }
 
-// The download + flash run on core 0, so the control loop on core 1 keeps counting strokes and
-// servicing the watchdog while a 1.3 MB image is pulled over a slow WiFi link.
-void updateTask(void*) {
-  for (;;) {
-    if (xSemaphoreTake(g_sem, portMAX_DELAY) == pdTRUE) {
-      const bool apply = g_apply;
-      g_pending = false;
-      g_running = true;
-      runJob(apply);
-      g_running = false;
-    }
-  }
-}
+// The download + flash run in the control loop (core 1), exactly like the Arduino HTTPUpdate
+// examples: the task that writes flash is the task that owns the watchdog, and no other task on the
+// same core can execute cached code while the flash cache is disabled mid-write.  Writing flash from
+// a task pinned to core 0 (where the WiFi/lwIP tasks live) panicked the board during an update.
 }  // namespace
 
 void begin() {
   memset(&g_info, 0, sizeof(g_info));
   g_nextAuto = millis() + 120000UL;
-  if (!g_sem) g_sem = xSemaphoreCreateBinary();
-  if (g_sem) xTaskCreatePinnedToCore(updateTask, "fwupd", 12288, nullptr, 1, nullptr, 0);
 }
 
 void request(bool apply) {
@@ -167,11 +155,17 @@ void request(bool apply) {
   }
   g_apply = apply;
   g_pending = true;
-  if (g_sem) xSemaphoreGive(g_sem);
 }
 
 void loop() {
-  if (g_pending || g_running) return;
+  if (g_pending) {                                       // run the job in this task (the control loop)
+    g_pending = false;
+    g_running = true;
+    runJob(g_apply);
+    g_running = false;
+    return;
+  }
+  if (g_running) return;
   if (store::net.autoUpdate && store::net.updateUrl[0] && (int32_t)(millis() - g_nextAuto) >= 0) {
     g_nextAuto = millis() + (uint32_t)store::net.checkMinutes * 60000UL;
     // automatic installs only while the machine is off and no stroke is in progress

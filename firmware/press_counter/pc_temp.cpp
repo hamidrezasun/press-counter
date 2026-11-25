@@ -1,6 +1,7 @@
 #include "pc_temp.h"
 #include "pc_errors.h"
 #include "pc_store.h"
+#include "pc_log.h"
 
 namespace {
 portMUX_TYPE g_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -49,9 +50,27 @@ bool readBit() {
 void writeByte(uint8_t v) { for (int i = 0; i < 8; i++) { writeBit(v & 1); v >>= 1; } }
 uint8_t readByte() { uint8_t v = 0; for (int i = 0; i < 8; i++) if (readBit()) v |= (uint8_t)(1u << i); return v; }
 
-void fail() {
+// One-shot diagnostic: what is actually on the 1-Wire bus (PIN_TEMP).  A DS18B20 in a 3-wire setup
+// answers a reset with a presence pulse and returns its 64-bit ROM code after 0x33 (READ ROM).
+// No presence pulse = wrong pin / no sensor / no 3V3 / no pull-up.  Presence but a wrong CRC on the
+// scratchpad = damaged sensor, missing common ground, too long or unshielded wiring, wrong pull-up.
+void scanBus() {
+  if (!reset()) { plog::log("temp: no presence pulse on GPIO%d (no sensor / no 3V3 / no pull-up)", (int)PIN_TEMP); return; }
+  writeByte(0x33);                                           // READ ROM (only valid with one device on the bus)
+  char rom[24];
+  int n = 0;
+  for (int i = 0; i < 8; i++) n += snprintf(rom + n, sizeof(rom) - n, "%02X", readByte());
+  plog::log("temp: 1-Wire device ROM %s (crc errors so far %lu)", rom, (unsigned long)g_crcErr);
+}
+
+void fail(const char* why) {
   if (g_fails < 255) g_fails++;
-  if (g_fails >= 3) { g_t10 = INT16_MIN; err::set(pc::ERR_TEMP, true); }
+  if (g_fails == 3) {
+    g_t10 = INT16_MIN;
+    err::set(pc::ERR_TEMP, true);
+    plog::log("temp: %s - E02 (three failed conversions)", why);
+    scanBus();
+  }
 }
 }  // namespace
 
@@ -67,14 +86,14 @@ void poll() {
   if (g_converting) {
     if (now - g_startAt < 800UL) return;                     // 12 bit: 750 ms
     g_converting = false;
-    if (!reset()) { fail(); return; }
+    if (!reset()) { fail("no presence pulse"); return; }
     writeByte(0xCC);                                         // skip ROM (one sensor on the bus)
     writeByte(0xBE);                                         // read scratchpad
     uint8_t sp[9];
     for (int i = 0; i < 9; i++) sp[i] = readByte();
     bool allFF = true;
     for (int i = 0; i < 9; i++) if (sp[i] != 0xFF) allFF = false;
-    if (allFF || pc::crc8Maxim(sp, 8) != sp[8]) { g_crcErr++; fail(); return; }
+    if (allFF || pc::crc8Maxim(sp, 8) != sp[8]) { g_crcErr++; fail(allFF ? "scratchpad all 0xFF" : "scratchpad CRC error"); return; }
     const int16_t t = pc::ds18b20Tenths(sp[0], sp[1]);
     if (t == 850 && g_okAt == 0) return;                     // +85.0 = power-on value before the first conversion: ignore once
     g_t10 = (int16_t)(t + store::cfg.tempOffset10);
@@ -86,7 +105,7 @@ void poll() {
   }
   if (now - g_startAt < TEMP_SAMPLE_MS) return;
   g_startAt = now;
-  if (!reset()) { fail(); return; }
+  if (!reset()) { fail("no presence pulse"); return; }
   writeByte(0xCC);
   writeByte(0x44);                                           // convert T (the sensor is powered from 3V3, not parasitic)
   g_converting = true;
