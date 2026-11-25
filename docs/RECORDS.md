@@ -32,11 +32,19 @@ records the die that was mounted at that moment.
 `/srv/pcreport/collector.py` (systemd `pcreport.service`) subscribes to the broker with
 `mosquitto_sub`, stores every message in SQLite (`/srv/pcreport/press.db`) and serves a report:
 
-* **http://192.168.1.57:8081/** — devices (state, operator, die, session/lifetime, errors), strokes per
-  operator and per die for the last 7 days, the last 40 strokes (time, count, duration, temperature,
-  operator, die), card scans and recent errors. Refreshes itself every 15 s.
-* **http://192.168.1.57:8081/api/summary** — the same data as JSON, for a dashboard or script.
+* **http://192.168.1.57:8081/** — live devices (relay, temperature, operator, die in press, session,
+  lifetime, errors, rssi), strokes per day, strokes per operator and per die, the last 60 strokes,
+  card scans and recent errors. Filter by window (1/7/30/90/365 days), operator or die; refreshes
+  itself every 20 s.
+* **http://192.168.1.57:8081/api/summary** — devices + strokes per operator/die as JSON.
+* **http://192.168.1.57:8081/api/strokes.csv** — every stroke as CSV (Excel-friendly).
+* **http://192.168.1.57:8081/api/messages?kind=press&limit=100** — raw stored messages, any kind.
 * **http://192.168.1.57:8081/healthz** — `ok`.
+
+The collector keeps one SQLite connection for the whole process (shared under a lock, WAL mode). The
+first version opened a connection per message and never closed it — it leaked file descriptors until
+the database could no longer be opened and the report page hung; the page also now answers with an
+error instead of blocking if the database is busy.
 
 Tables: `messages` (every raw message), `strokes`, `cards`, `devices` (one row per machine, updated by
 its retained status). Standard library only; nothing to install.
