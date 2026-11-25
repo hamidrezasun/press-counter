@@ -148,9 +148,14 @@ void loop() {
   ui::poll();
   shell::poll();
   net::loop();
-  mqtt::loop();
-  events::poll();
-  web::loop();
+  // While an update is downloading/flashing it owns the lwIP stack: the MQTT publisher, the web
+  // server and the event queue are suspended, otherwise two cores touch the same pbufs and lwIP
+  // asserts (pbuf_free: p->ref > 0).  Local control (press, buttons, display, relay) keeps running.
+  if (!fwupd::busy()) {
+    mqtt::loop();
+    events::poll();
+    web::loop();
+  }
   fwupd::loop();
   if (buttons::takeSetupRequest()) net::startSetupAp();
 

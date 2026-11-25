@@ -68,13 +68,9 @@ bool open(HTTPClient& http, std::unique_ptr<NetworkClient>& client, const String
 }
 
 bool install(const char* url, long expected, const char* md5) {
-  // An update must be possible in every situation: if the machine is enabled, switch it off first
-  // (the relay drops the press contactor = safe state), then flash.  An active stroke signal is
-  // tolerated - the running stroke is lost, the lifetime counter is flushed before the restart.
-  if (session::relayOn()) {
-    session::setRelay(false, pc::RR_REMOTE);
-    plog::log("update: machine switched off for the update");
-  }
+  // The machine relay is switched off by request() in the caller's context (the control loop / web
+  // handler): doing it here would publish an MQTT event from this task while the download owns the
+  // network stack, which makes lwIP assert (pbuf_free: p->ref > 0).
   if (press::active()) plog::log("update: stroke signal active - flashing anyway");
   setPhase(P_DOWNLOAD, 0, "downloading firmware");
   HTTPClient http;
@@ -162,6 +158,13 @@ void begin() {
 
 void request(bool apply) {
   if (g_pending || g_running) return;
+  // An update must be possible in every situation: drop the machine relay first (safe state).  This
+  // runs in the caller's context, so the MQTT event it produces stays on the control loop while the
+  // update task owns the network stack.
+  if (session::relayOn()) {
+    session::setRelay(false, pc::RR_REMOTE);
+    plog::log("update: machine switched off for the update");
+  }
   g_apply = apply;
   g_pending = true;
   if (g_sem) xSemaphoreGive(g_sem);
