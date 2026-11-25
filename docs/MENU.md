@@ -71,6 +71,9 @@ serial `update install`) always works and switches the machine off first.
 
 ## Notes
 
+* While an update is downloading/flashing, the web page is stopped on purpose (only one user of the
+  network stack at a time): `http://<board>/` answers again a few seconds after the restart, and the
+  counter, relay and display keep working meanwhile.
 * The counter, the relay, NFC cards and the display keep working with no network at all.
 * An interrupted update (power loss, WiFi drop) leaves the previous firmware running; the boot slot is
   switched only after a complete, MD5-verified write.
