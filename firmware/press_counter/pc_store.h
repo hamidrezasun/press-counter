@@ -53,6 +53,8 @@ bool setParam(const char* key, const char* value);     // validated; call save()
 bool getParam(const char* key, char* out, size_t outSize);
 int  paramCount();
 const char* paramKey(int index);
+bool stepParam(const char* key, int32_t dir);            // move a numeric setting one step (clamped), for the button menu
+bool paramIsText(const char* key);                       // strings cannot be edited with two buttons
 
 uint32_t lifetime();                                   // strokes counted since the board was first programmed
 void lifetimeAdd(uint32_t n);

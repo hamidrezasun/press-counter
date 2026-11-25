@@ -1,6 +1,7 @@
 #include "pc_display.h"
 #include <Wire.h>
 #include "pc_font5x7.h"
+#include "pc_menu.h"
 #include "pc_store.h"
 #include "pc_errors.h"
 #include "pc_session.h"
@@ -205,6 +206,7 @@ void wake() {
 }
 
 void poll() {
+  if (menu::active()) return;                                           // the menu draws the display itself
   if (!store::cfg.displayOn) { err::set(pc::ERR_DISPLAY, false); return; }
   const uint32_t now = millis();
   if (!display::present()) {                                            // module missing / plugged in later: look again now and then

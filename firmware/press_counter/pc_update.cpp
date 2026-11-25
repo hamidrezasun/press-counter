@@ -174,7 +174,8 @@ void loop() {
   if (g_pending || g_running) return;
   if (store::net.autoUpdate && store::net.updateUrl[0] && (int32_t)(millis() - g_nextAuto) >= 0) {
     g_nextAuto = millis() + (uint32_t)store::net.checkMinutes * 60000UL;
-    if (!session::relayOn()) request(true);                  // automatic installs only while the machine is off
+    // automatic installs only while the machine is off and no stroke is in progress
+    if (!session::relayOn() && !press::active()) request(true);
   }
 }
 

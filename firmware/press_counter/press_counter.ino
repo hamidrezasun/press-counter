@@ -18,6 +18,7 @@
 #include "pc_events.h"
 #include "pc_io.h"
 #include "pc_log.h"
+#include "pc_menu.h"
 #include "pc_mqtt.h"
 #include "pc_net.h"
 #include "pc_nfc.h"
@@ -147,6 +148,7 @@ void loop() {
   io::poll();
   ui::poll();
   shell::poll();
+  menu::poll();                                            // two-button menu owns the display while open
   net::loop();
   // While an update is downloading/flashing it owns the lwIP stack: the MQTT publisher, the web
   // server and the event queue are suspended, otherwise two cores touch the same pbufs and lwIP
@@ -157,7 +159,7 @@ void loop() {
     web::loop();
   }
   fwupd::loop();
-  if (buttons::takeSetupRequest()) net::startSetupAp();
+  if (buttons::takeSetupRequest()) menu::open();            // both call buttons: local menu (also WiFi setup)
 
   const uint32_t now = millis();
   if (now - g_tempAt >= TEMP_REPORT_MS) {

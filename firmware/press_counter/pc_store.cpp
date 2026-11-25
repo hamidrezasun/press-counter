@@ -141,6 +141,35 @@ bool getParam(const char* key, char* out, size_t outSize) {
 int paramCount() { return NPARAMS; }
 const char* paramKey(int index) { return (index >= 0 && index < NPARAMS) ? PARAMS[index].key : ""; }
 
+bool paramIsText(const char* key) {
+  for (int i = 0; i < NPARAMS; i++) if (!strcmp(PARAMS[i].key, key)) return PARAMS[i].kind == K_STR;
+  return true;
+}
+
+// One button step: booleans toggle, small ranges move by 1, wide ranges by 5 (clamped to the limits).
+bool stepParam(const char* key, int32_t dir) {
+  for (int i = 0; i < NPARAMS; i++) {
+    const Param& p = PARAMS[i];
+    if (strcmp(p.key, key) != 0) continue;
+    if (p.kind == K_STR) return false;
+    uint8_t* base = (uint8_t*)&cfg + p.off;
+    int32_t v;
+    if (p.kind == K_U8) v = *base;
+    else if (p.kind == K_U16) { uint16_t u; memcpy(&u, base, 2); v = u; }
+    else { int16_t s; memcpy(&s, base, 2); v = s; }
+    const int32_t step = (p.hi - p.lo) <= 10 ? 1 : 5;
+    if (p.hi == 1 && p.lo == 0 && dir) v = v ? 0 : 1;                 // yes/no setting
+    else v += dir * step;
+    if (v < p.lo) v = p.lo;
+    if (v > p.hi) v = p.hi;
+    if (p.kind == K_U8) *base = (uint8_t)v;
+    else if (p.kind == K_U16) { const uint16_t u = (uint16_t)v; memcpy((uint8_t*)base, &u, 2); }
+    else { const int16_t s = (int16_t)v; memcpy((uint8_t*)base, &s, 2); }
+    return true;
+  }
+  return false;
+}
+
 uint32_t lifetime() { return g_lifetime; }
 void lifetimeAdd(uint32_t n) { g_lifetime += n; }
 
