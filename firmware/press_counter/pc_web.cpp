@@ -350,9 +350,9 @@ void resume() {
 }
 
 bool serving() { return g_serving; }
-}
 
 void loop() {
+  if (!g_serving) return;                  // stopped while the update owns the network
   srv.handleClient();
   if (g_restartAt && (int32_t)(millis() - g_restartAt) >= 0) session::remoteCommand(pc::CMD_REBOOT, 0, pc::RR_WEB);
 }
