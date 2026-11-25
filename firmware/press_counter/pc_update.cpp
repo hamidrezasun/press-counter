@@ -16,6 +16,7 @@
 #include "pc_session.h"
 #include "pc_store.h"
 #include "pc_web.h"
+#include "pc_trace.h"
 
 namespace fwupd {
 namespace {
@@ -67,59 +68,123 @@ bool open(HTTPClient& http, std::unique_ptr<NetworkClient>& client, const String
   return http.GET() == HTTP_CODE_OK;
 }
 
-bool install(const char* url, long expected, const char* md5) {
-  // The machine relay is switched off by request() in the caller's context (the control loop / web
-  // handler): doing it here would publish an MQTT event from this task while the download owns the
-  // network stack, which makes lwIP assert (pbuf_free: p->ref > 0).
-  if (press::active()) plog::log("update: stroke signal active - flashing anyway");
-  setPhase(P_DOWNLOAD, 0, "downloading firmware");
-  web::pause();                                      // the web server must not touch the network now
-  HTTPClient http;
-  std::unique_ptr<NetworkClient> client;
-  if (!open(http, client, absoluteUrl(url))) { setPhase(P_FAILED, 0, "firmware image: HTTP error"); web::resume(); return false; }
-  long total = http.getSize();
-  if (total <= 0) total = expected;
-  if (total <= 0 || !Update.begin((size_t)total)) { setPhase(P_FAILED, 0, "firmware image: no room / unknown size"); web::resume(); return false; }
+// ── image download over a raw socket ─────────────────────────────────────────────────────────────
+// HTTPClient was where the board panicked (trace step 3) on this image, both from a task and from the
+// control loop, with an 8 kB and with a 20 kB stack.  The transfer is small and the server is a plain
+// static file host, so it is done here with a socket we control, with a trace mark at every stage.
+struct Url {
+  bool tls = false;
+  String host, path;
+  uint16_t port = 80;
+};
+
+bool parseUrl(const String& url, Url& u) {
+  const int p = url.indexOf("://");
+  if (p < 0) return false;
+  u.tls = url.startsWith("https://");
+  const String rest = url.substring(p + 3);
+  const int slash = rest.indexOf('/');
+  String hp = slash < 0 ? rest : rest.substring(0, slash);
+  u.path = slash < 0 ? "/" : rest.substring(slash);
+  const int colon = hp.indexOf(':');
+  if (colon >= 0) {
+    u.port = (uint16_t)hp.substring(colon + 1).toInt();
+    hp = hp.substring(0, colon);
+  } else {
+    u.port = u.tls ? 443 : 80;
+  }
+  u.host = hp;
+  return u.host.length() > 0 && u.port > 0;
+}
+
+bool downloadImage(const char* url, long expected, const char* md5) {
+  Url u;
+  if (!parseUrl(absoluteUrl(url), u)) { setPhase(P_FAILED, 0, "firmware URL is not usable"); return false; }
+  trace::mark(11);
+  NetworkClient c;
+  c.setTimeout(8);
+  if (!c.connect(u.host.c_str(), u.port)) {
+    trace::mark(12);
+    setPhase(P_FAILED, 0, "firmware image: cannot connect");
+    return false;
+  }
+  trace::mark(13);
+  c.printf("GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: press-counter/%s\r\nConnection: close\r\n",
+           u.path.c_str(), u.host.c_str(), PC_FW_VERSION_STR);
+  if (store::net.updateToken[0]) c.printf("Authorization: Bearer %s\r\n", store::net.updateToken);
+  c.print("\r\n");
+  trace::mark(14);
+
+  String line = c.readStringUntil('\n');                       // status line
+  if (line.indexOf(" 200") < 0) { trace::mark(15); setPhase(P_FAILED, 0, "firmware image: HTTP error"); return false; }
+  long clen = -1;
+  for (int guard = 0; guard < 40; guard++) {                    // headers
+    line = c.readStringUntil('\n');
+    if (line.length() == 0 || line == "\r") break;
+    if (line.startsWith("Content-Length:")) clen = line.substring(15).toInt();
+  }
+  trace::mark(16);
+
+  long total = clen > 0 ? clen : expected;
+  if (total <= 0 || !Update.begin((size_t)total)) { trace::mark(17); setPhase(P_FAILED, 0, "firmware image: no room / unknown size"); return false; }
   if (md5 && strlen(md5) == 32) Update.setMD5(md5);
-  NetworkClient* s = http.getStreamPtr();
-  uint8_t buf[1024];
+  trace::mark(18);
+
+  static uint8_t buf[1024];                                     // keep 1 kB off the task stack
   long got = 0;
   uint32_t lastData = millis();
   while (got < total) {
-    esp_task_wdt_reset();                              // this task owns the watchdog while it flashes
-    const int avail = s ? s->available() : -1;
-    if (avail < 0) break;
+    esp_task_wdt_reset();                                       // this task owns the watchdog while it flashes
+    const int avail = c.available();
     if (avail == 0) {
-      if (!s->connected() || millis() - lastData > 12000UL) break;
+      if (!c.connected() || millis() - lastData > 12000UL) break;
       delay(2);
       continue;
     }
-    const int n = s->read(buf, avail < (int)sizeof(buf) ? avail : (int)sizeof(buf));
+    const int n = c.read(buf, avail < (int)sizeof(buf) ? avail : (int)sizeof(buf));
     if (n <= 0) continue;
     lastData = millis();
+    trace::mark(5, (uint32_t)(100LL * got / total));
     if (Update.write(buf, (size_t)n) != (size_t)n) break;
     esp_task_wdt_reset();
     got += n;
     g_info.pct = (uint8_t)(100LL * got / total);
   }
+  c.stop();
+  trace::mark(6);
   if (got != total || !Update.end()) {
     Update.abort();
     setPhase(P_FAILED, 0, "firmware image rejected (size / MD5)");
     err::latch(pc::ERR_UPDATE, 1, 600000UL);
-    web::resume();
+    trace::mark(9);
     return false;
   }
+  trace::mark(7);
   setPhase(P_DONE, 100, "updated - restarting");
-  store::lifetimeFlush(true);
   delay(500);
   ESP.restart();
-  return true;
+  return false;
+}
+
+bool install(const char* url, long expected, const char* md5) {
+  // The machine relay is dropped by request() in the caller's context (see the note there).
+  if (press::active()) plog::log("update: stroke signal active - flashing anyway");
+  setPhase(P_DOWNLOAD, 0, "downloading firmware");
+  web::pause();                                   // nothing else may touch the network while this runs
+  trace::mark(8);
+  plog::log("update: stack headroom %u bytes before the firmware GET",
+            (unsigned)(uxTaskGetStackHighWaterMark(NULL) * sizeof(StackType_t)));
+  store::lifetimeFlush(true);                     // persist the counter while the flash is still idle
+  const bool ok = downloadImage(url, expected, md5);   // restarts the board when it succeeds
+  web::resume();                                       // only reached on failure
+  return ok;
 }
 
 void runJob(bool apply) {
   if (!net::wifiUp()) { setPhase(P_FAILED, 0, "no WiFi"); return; }
   if (!store::net.updateUrl[0]) { setPhase(P_FAILED, 0, "no update server configured"); return; }
   setPhase(P_CHECK, 0, "checking the update server");
+  trace::mark(2);
   DynamicJsonDocument doc(768);
   {
     HTTPClient http;
@@ -131,8 +196,8 @@ void runJob(bool apply) {
   if (e.isNull()) { setPhase(P_FAILED, 0, "manifest has no \"esp32\" entry"); return; }
   pc::copyStr(g_info.latest, e["version"] | "", sizeof(g_info.latest));
   g_info.isNew = versionOf(g_info.latest) > versionOf(PC_FW_VERSION_STR);
-  if (!g_info.isNew) { setPhase(P_IDLE, 0, "firmware is up to date"); return; }
-  if (!apply) { setPhase(P_IDLE, 0, "new firmware available"); return; }
+  if (!g_info.isNew) { setPhase(P_IDLE, 0, "firmware is up to date"); trace::mark(0); return; }
+  if (!apply) { setPhase(P_IDLE, 0, "new firmware available"); trace::mark(0); return; }
   install(e["url"] | "", e["size"] | 0L, e["md5"] | "");
 }
 

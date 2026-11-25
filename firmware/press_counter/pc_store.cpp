@@ -170,6 +170,12 @@ bool stepParam(const char* key, int32_t dir) {
   return false;
 }
 
+void saveDie(const char* id) { g_prefs.putString("die", id ? id : ""); }
+void loadDie(char* out, size_t outSize) {
+  const String d = g_prefs.getString("die", "");
+  pc::copyStr(out, d.c_str(), outSize);
+}
+
 uint32_t lifetime() { return g_lifetime; }
 void lifetimeAdd(uint32_t n) { g_lifetime += n; }
 

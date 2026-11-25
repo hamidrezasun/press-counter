@@ -335,16 +335,18 @@ void begin() {
 // The download/flash opens its own HTTP client.  Leaving the web server accepting clients while it
 // does makes the board panic (two users of the same lwIP stack: an assert in the pbuf handling), so
 // the server is stopped for the duration of an update and started again if the update fails.
+// NB: do not call srv.stop()/srv.begin() here.  Stopping the WebServer from outside its own handler
+// (the update is triggered by a POST that is still an open client) panicked the board every time the
+// update was started from the web page; simply not servicing the server is enough to keep it out of
+// the network stack while the download runs.
 void pause() {
   if (!g_serving) return;
-  srv.stop();
   g_serving = false;
-  plog::log("web: page stopped while the update runs");
+  plog::log("web: page paused while the update runs");
 }
 
 void resume() {
   if (g_serving) return;
-  srv.begin();
   g_serving = true;
   plog::log("web: page back up");
 }

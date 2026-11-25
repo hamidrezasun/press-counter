@@ -30,7 +30,8 @@ namespace session {
 void begin() {
   g_relay = false;
   g_relayOnAt = g_relayOffAt = 0;
-  g_operator[0] = g_die[0] = '\0';
+  g_operator[0] = '\0';
+  store::loadDie(g_die, sizeof(g_die));          // the die mounted on the press survives a reset
 }
 
 bool relayOn() { return g_relay; }
@@ -54,7 +55,9 @@ bool setRelay(bool on, uint8_t reason) {
   if (on) { g_relayOnAt = millis(); g_lastActivity = g_relayOnAt; }
   else {
     g_relayOffAt = millis();
-    g_operator[0] = g_die[0] = '\0';
+    // The operator and die stay on the display after the machine stops: the last person and the last
+    // die are useful to read from the machine with no phone/web page at hand.  They are cleared on the
+    // next session start and at reset.
   }
   events::pushRelay(on, reason);
   return true;
@@ -100,6 +103,7 @@ void handleTag(char kind, const char* text) {
     pc::copyStr(id, afterColon(text), sizeof(id));
     const bool sameDie = g_dieTest && strcmp(g_die, id) == 0;
     pc::copyStr(g_die, id, sizeof(g_die));               // the die that is mounted is always recorded
+    store::saveDie(g_die);                              // ... and kept in NVS: it is the die in the press
     if (sameDie) {
       // scanning the same die card again ends the test
       g_dieTest = false;
@@ -114,6 +118,7 @@ void handleTag(char kind, const char* text) {
       press::setCountEnabled(false);
       setRelay(true, pc::RR_TAG);                        // refuses on over-temperature, like every other start
       pc::copyStr(g_die, id, sizeof(g_die));
+      store::saveDie(g_die);
       io::play(io::SND_SUCCESS);
       banner(g_relay ? "DIE TEST - MACHINE ON" : g_die);
     }

@@ -43,7 +43,12 @@ itself after leaving it — the display returns to the normal screen.
 | hold **SUP** 1 s | back one level; at the top level it leaves the menu |
 | hold **NET** 1 s | (only while editing a value) save it and go back |
 
-Every screen shows its own hint on the bottom line, e.g. `NET=ok SUP=next  hold SUP=out`.
+The bottom line is a **scrolling hint** ("subtitle"): instructions longer than the 21-character line
+walk across it, so nothing is ever cut off. On every screen except the top one the title bar also shows
+`hSUP=out` — hold CALL SUP to go back.
+
+There is a ~0.6 s guard right after the menu opens (and 0.3 s after every screen change), so the buttons
+you used to get there cannot select or start something by accident.
 
 ## The entries
 

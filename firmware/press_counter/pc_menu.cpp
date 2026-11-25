@@ -25,6 +25,7 @@ int    g_param = 0;
 char   g_orig[40];
 uint32_t g_supAt = 0, g_netAt = 0;
 bool g_supDown = false, g_netDown = false, g_supLong = false, g_netLong = false;
+uint32_t g_guard = 0;                       // ignore button edges until this millis() (opening / screen change)
 
 const char* const ITEMS[] = {"Check update", "Install update", "Show log", "WiFi setup", "Settings", "Exit"};
 const char* const ITEM_DESC[] = {"ask the update server", "download and restart", "last log lines", "open setup network", "machine settings", "back to the counter"};
@@ -33,16 +34,41 @@ const int NITEMS = sizeof(ITEMS) / sizeof(ITEMS[0]);
 const int ROWS = 6;                              // 64 px / 10 px per row, title bar on top
 const int ROOT_ROWS = 4;                         // root list keeps room for the description + hints
 
-void hint(const char* s) {
+char g_hint[80] = "";                           // the full text; longer than the screen scrolls
+
+// Bottom line.  A text that does not fit walks across the screen like a subtitle, so the whole
+// instruction is readable on the 21-character OLED line.  Called from draw(), which runs every frame.
+void drawHint() {
+  const int n = (int)strlen(g_hint);
   char b[22];
-  snprintf(b, sizeof(b), "%-20.20s", s);
+  if (n <= 20) {
+    snprintf(b, sizeof(b), "%-20.20s", g_hint);
+  } else {
+    const int gap = 6, total = n + gap;                     // blank gap between the passes
+    const int off = (int)((millis() / 220UL) % (uint32_t)total);
+    for (int i = 0; i < 20; i++) {
+      const int idx = (off + i) % total;
+      b[i] = idx < n ? g_hint[idx] : ' ';
+    }
+    b[20] = '\0';
+  }
   display::text(0, 56, b, 1, true);
+}
+
+void hint(const char* s) {
+  pc::copyStr(g_hint, s, sizeof(g_hint));
+  drawHint();
 }
 
 void title(const char* t) {
   char b[22];
   snprintf(b, sizeof(b), "%-20.20s", t);
   display::text(0, 0, b, 1, true);
+  if (g_screen != S_ROOT) {                     // on the white bar: hold SUP = back, always visible
+    char h[12];
+    pc::copyStr(h, "hSUP=out", sizeof(h));
+    display::text(128 - display::textWidth(h, 1), 0, h, 1, true);
+  }
 }
 
 void row(int i, const char* t, bool mark) {
@@ -65,7 +91,7 @@ void drawRoot() {
   char d[24];
   snprintf(d, sizeof(d), "%s", ITEM_DESC[g_sel]);
   display::text(0, 46, d, 1, false);
-  hint("NET=ok SUP=next  hold SUP=out");
+  hint("NET=ok  SUP=next  hold SUP=exit");
 }
 
 void drawUpdate() {
@@ -76,7 +102,7 @@ void drawUpdate() {
   snprintf(b, sizeof(b), "new  %s", u.latest[0] ? u.latest : "-"); row(1, b, false);
   snprintf(b, sizeof(b), "%3u%% %s", u.pct, u.phase == fwupd::P_IDLE ? "" : ".."); row(2, b, false);
   row(3, u.msg[0] ? u.msg : "press NET to start", true);
-  hint("NET=start hold SUP=back");
+  hint("NET=start the update  hold SUP=exit");
 }
 
 void drawLog() {
@@ -86,7 +112,7 @@ void drawLog() {
     const int idx = n - 1 - g_logTop - (ROWS - 2 - i);
     row(i, idx >= 0 ? plog::line(idx) : "", false);
   }
-  hint("SUP/NET=scroll hold SUP=back");
+  hint("SUP/NET=scroll  hold SUP=exit");
 }
 
 void drawParam(bool editing) {
@@ -95,10 +121,11 @@ void drawParam(bool editing) {
     char v[30];
     store::getParam(store::paramKey(g_param), v, sizeof(v));
     char b[24];
-    snprintf(b, sizeof(b), "%-10.10s", store::paramKey(g_param)); row(0, b, false);
-    snprintf(b, sizeof(b), "was %s", g_orig);                     row(1, b, false);
-    snprintf(b, sizeof(b), "now %s", v);                          row(2, b, true);
-    hint("NET=+ SUP=- holdNET=save");
+    snprintf(b, sizeof(b), "%-12.12s %.7s", store::paramKey(g_param), v); row(0, b, true);
+    snprintf(b, sizeof(b), "was %.16s", g_orig);                  row(1, b, false);
+    snprintf(b, sizeof(b), "now %.16s", v);                       row(2, b, false);
+    row(4, "NET=+1   SUP=-1", false);
+    hint("hold NET=save and go back   hold SUP=cancel");
     return;
   }
   for (int i = 0; i < ROWS - 1; i++) {
@@ -106,10 +133,10 @@ void drawParam(bool editing) {
     if (idx >= store::paramCount()) break;
     char v[30], b[24];
     store::getParam(store::paramKey(idx), v, sizeof(v));
-    snprintf(b, sizeof(b), "%-8.8s %s", store::paramKey(idx), v);
+    snprintf(b, sizeof(b), "%-8.8s %.11s", store::paramKey(idx), v);      // 20 characters: fits 128 px
     row(i, b, idx == g_param);
   }
-  hint("NET=edit SUP=next");
+  hint("NET=edit  SUP=next  hold SUP=exit");
 }
 
 void draw() {
@@ -131,6 +158,7 @@ void clampScroll() {
 }
 
 void enter() {
+  g_guard = millis() + 300;
   switch (g_screen) {
     case S_ROOT:
       if (g_sel == 0) { fwupd::request(false); g_screen = S_UPDATE; }
@@ -150,6 +178,7 @@ void enter() {
 }
 
 void back() {
+  g_guard = millis() + 300;
   if (g_screen == S_EDIT) { g_screen = S_PARAM; return; }             // cancel (nothing saved)
   if (g_screen == S_PARAM) { g_screen = S_ROOT; return; }
   if (g_screen == S_LOG) { g_screen = S_ROOT; return; }
@@ -163,6 +192,9 @@ namespace menu {
 void open() {
   g_open = true;
   buttons::setMenuMode(true);          // the two buttons now only drive the menu
+  g_guard = millis() + 600;            // whatever was held to get here must not select anything
+  g_supDown = buttons::down(1);
+  g_netDown = buttons::down(2);
   g_screen = S_ROOT;
   g_sel = g_top = 0;
   session::banner("MENU", 3000);
@@ -177,6 +209,15 @@ void poll() {
   if (!g_open) return;
   const bool sup = buttons::down(1), net = buttons::down(2);
   const uint32_t now = millis();
+
+  if ((int32_t)(now - g_guard) < 0) {              // still settling: track the state, act on nothing
+    g_supDown = sup;
+    g_netDown = net;
+    ui::wake();
+    draw();
+    delay(30);
+    return;
+  }
 
   if (sup && !g_supDown) { g_supAt = now; g_supLong = false; }
   if (net && !g_netDown) { g_netAt = now; g_netLong = false; }

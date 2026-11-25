@@ -56,6 +56,10 @@ const char* paramKey(int index);
 bool stepParam(const char* key, int32_t dir);            // move a numeric setting one step (clamped), for the button menu
 bool paramIsText(const char* key);                       // strings cannot be edited with two buttons
 
+// the die that is mounted on the press, kept across resets (it identifies the tool currently in the machine)
+void saveDie(const char* id);
+void loadDie(char* out, size_t outSize);
+
 uint32_t lifetime();                                   // strokes counted since the board was first programmed
 void lifetimeAdd(uint32_t n);
 void lifetimeFlush(bool force = false);                // writes to NVS every LIFETIME_SAVE_EVERY strokes (or force)

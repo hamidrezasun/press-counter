@@ -12,6 +12,10 @@
 #include <esp_system.h>
 #include <esp_task_wdt.h>
 #include "pc_config.h"
+
+// Note: the control-loop stack is enlarged in pc_loopstack.cpp (the core's 8192-byte default is
+// marginal for the firmware download that now runs in this task).
+
 #include "pc_buttons.h"
 #include "pc_display.h"
 #include "pc_errors.h"
@@ -30,6 +34,7 @@
 #include "pc_store.h"
 #include "pc_temp.h"
 #include "pc_update.h"
+#include "pc_trace.h"
 #include "pc_web.h"
 
 #ifdef PC_BENCH_DEBUG
@@ -81,8 +86,12 @@ void setup() {
   PC_DBG("events ok");
   const esp_reset_reason_t rr = esp_reset_reason();
   plog::log("press counter %s starting, reset: %s", PC_FW_VERSION_STR, resetText(rr));
+  plog::log("loop task stack free: %u bytes (of %u)",
+            (unsigned)(uxTaskGetStackHighWaterMark(NULL) * sizeof(StackType_t)),
+            (unsigned)getArduinoLoopTaskStackSize());
   if (!settingsOk) { err::latch(pc::ERR_SETTINGS); store::save(); }
   if (rr == ESP_RST_PANIC || rr == ESP_RST_INT_WDT || rr == ESP_RST_TASK_WDT || rr == ESP_RST_WDT) err::latch(pc::ERR_WATCHDOG, (uint16_t)rr);
+  trace::boot();                                           // report where the previous run stopped (RTC memory)
 
   buttons::begin();
   PC_DBG("buttons ok");

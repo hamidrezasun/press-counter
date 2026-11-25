@@ -1,4 +1,5 @@
 #include "pc_events.h"
+#include "pc_session.h"
 #include "pc_errors.h"
 #include "pc_log.h"
 #include "pc_mqtt.h"
@@ -85,6 +86,8 @@ void poll() {
 void pushPress(uint32_t count, uint16_t durMs, int16_t tempC10, bool relayOn) {
   Event* e = beginEvent('P');
   e->a = count; e->b = durMs; e->c = tempC10; e->d = relayOn ? 1 : 0;
+  // who pressed with which die mounted: "<operator>|<die>", published as two fields
+  snprintf(e->text, sizeof(e->text), "%s|%s", session::operatorId(), session::dieId());
 }
 void pushNfc(char kind, bool relayAfter, const char* text) {
   Event* e = beginEvent('N');
@@ -124,23 +127,34 @@ uint32_t published() { return g_published; }
 
 // MQTT payloads (docs/PROTOCOL.md); ts = unix seconds (0 = no clock yet), ms = unix milliseconds
 bool toJson(const Event& e, const char*& kind, char* json, size_t n) {
-  char text[100], ttxt[16];
+  char text[100], ttxt[16], pair[104];
   uint64_t tms = e.tms;
   if (!tms && clk::valid()) tms = clk::ms() - (uint64_t)(millis() - e.atMs);    // happened before NTP answered: back-date it now
   const unsigned long tsec = (unsigned long)(tms / 1000ULL);
   int w = 0;
   switch (e.type) {
-    case 'P':
+    case 'P': {
       fmtT10(ttxt, sizeof(ttxt), e.c == INT16_MIN ? 0 : e.c);
-      w = snprintf(json, n, "{\"count\":%lu,\"duration\":%lu,\"temperature\":%s,\"relay\":%u,\"seq\":%u,\"ts\":%lu}",
-                   (unsigned long)e.a, (unsigned long)e.b, ttxt, e.d, e.seq, tsec);
+      char op[48], die[48];
+      pc::copyStr(pair, e.text, sizeof(pair));
+      char* bar = strchr(pair, '|');
+      if (bar) { *bar = '\0'; pc::copyStr(die, bar + 1, sizeof(die)); } else die[0] = '\0';
+      pc::copyStr(op, pair, sizeof(op));
+      escStr(op, pair, sizeof(pair));  pc::copyStr(op, pair, sizeof(op));
+      escStr(die, text, sizeof(text)); pc::copyStr(die, text, sizeof(die));
+      w = snprintf(json, n, "{\"count\":%lu,\"duration\":%lu,\"temperature\":%s,\"relay\":%u,\"operator\":\"%s\",\"die\":\"%s\",\"seq\":%u,\"ts\":%lu}",
+                   (unsigned long)e.a, (unsigned long)e.b, ttxt, e.d, op, die, e.seq, tsec);
       kind = "press";
       break;
-    case 'N':
+    }
+    case 'N': {
       escStr(e.text, text, sizeof(text));
-      w = snprintf(json, n, "{\"tag\":\"%s\",\"kind\":\"%c\",\"relay\":%u,\"seq\":%u,\"ts\":%lu}", text, (char)e.a, e.d, e.seq, tsec);
+      escStr(session::dieId(), pair, sizeof(pair));        // which die was mounted when the card was read
+      w = snprintf(json, n, "{\"tag\":\"%s\",\"kind\":\"%c\",\"relay\":%u,\"operator\":\"%s\",\"die\":\"%s\",\"seq\":%u,\"ts\":%lu}",
+                   text, (char)e.a, e.d, session::operatorId(), pair, e.seq, tsec);
       kind = "nfc";
       break;
+    }
     case 'R':
       w = snprintf(json, n, "{\"relay\":%lu,\"reason\":%lu,\"seq\":%u,\"ts\":%lu}", (unsigned long)e.a, (unsigned long)e.b, e.seq, tsec);
       kind = "relay";
