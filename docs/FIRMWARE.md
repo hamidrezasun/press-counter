@@ -140,9 +140,48 @@ updateurl <url>   set the update server (folder holding manifest.json) and save 
 
 Notes:
 
-* The manifest check/download/flash runs in a FreeRTOS task pinned to **core 0**; the control loop keeps
-  counting strokes on core 1 and the watchdog window is widened for the duration of the update.
+* The manifest check, download and flash run in the **control loop task** (core 1) - the task that owns
+  the watchdog and the only task that writes flash - with `esp_task_wdt_reset()` per chunk and a widened
+  watchdog window.  Downloading from a task pinned to core 0 (where the WiFi/lwIP tasks live) panicked the
+  board; downloading while the web server was still accepting clients panicked it as well, so the web server
+  is stopped for the duration and started again if the update fails.
 * An update is installed in every situation: if the machine relay is on it is switched off first (safe
   state), and an active stroke signal is tolerated instead of refusing the update.
 * After flashing the app over USB on a board that has previously updated over the air, erase `otadata`
   (`esptool erase-region 0xe000 0x2000`) — otherwise the bootloader keeps booting the OTA slot.
+
+
+## Recovery: the board is online but refuses to install an update
+
+Symptom: an install request (web, menu, MQTT or `update install`) only **restarts** the board, and the log
+shows the request being thrown away right before the link comes up:
+
+```
+20 update: no WiFi at boot, update skipped
+20 WiFi connected, ip 192.168.1.60
+```
+
+Cause: `net::wifiUp()` returns `g_up`, and `g_up` is written **only** in `net::loop()`.  A build whose
+`setup()` waits for the link with a bare delay loop (`for (...) delay(200);`) never updates `g_up`, so
+`fwupd::bootInstall()` always sees "no WiFi" and clears the queued install.  It fails **every** time, on
+every board, and there is no second install path in that build (`runJob()` is only reached from
+`bootInstall()` and from `loop()`, and nothing sets `g_pending` for an install).
+
+In this tree it is fixed twice over: `setup()` calls `net::loop()` inside the wait, and `fwupd::loop()`
+runs a queued install as soon as the link is up.  A board stuck on the older build therefore needs **one**
+flash over the cable:
+
+1. `J3` (USB micro-B "service port", bottom edge of the enclosure) is wired to an on-board **CH340G with
+   auto-reset** (2x SS8050), so no button holding is needed - but the CH340 is *not* CDC-ACM:
+   * Windows / Linux: works out of the box.
+   * macOS: needs the WCH CH34x driver; without it the port never appears (`/dev/cu.usbserial*` stays missing).
+2. Flash the app and clear the OTA selector (the board may be booting the other OTA slot):
+
+```bash
+esptool.py --chip esp32 --port <PORT> --baud 460800 write-flash 0x10000 press_counter-<ver>.bin
+esptool.py --chip esp32 --port <PORT> erase-region 0xe000 0x2000      # otadata: boot the freshly written slot
+```
+   The image is on the update server: `http://192.168.1.57:8080/press_counter-<ver>.bin`.
+3. No USB connector available? The ESP32's own **TX (IO1) / RX (IO3) / GND** plus **IO0 to GND while powering
+   up** (to enter the ROM downloader) work with any 3.3 V USB-TTL adapter - a CP2102/CP2104 is the safest
+   choice on macOS because that driver ships with the system.
